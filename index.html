@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Next Pitch</title>
+<meta name="description" content="A daily baseball guessing game. One pitcher, at-bats from across his career, and one question every pitch: what's coming?">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Zilla+Slab:wght@400;500;600;700&display=swap">
+<style>
+  /* ── Ballpark Print ───────────────────────────────────────────
+     A scorecard you'd buy at the gate: cream stock, ink-black rules,
+     slab type. Deliberately one visual world, so every colour is
+     painted explicitly rather than inherited from the viewer's theme. */
+  :root{
+    --paper:#F4EFE3; --card:#EDE6D6; --card-2:#E4DAC5;
+    --ink:#1E1A14; --ink-2:#4A4238; --mute:#6B6355; --faint:#A3998A;
+    --rule:#1E1A14; --hair:rgba(30,26,20,.22);
+    --red:#B3341F; --green:#1F6B45; --dirt:#9A5A3C;
+    --zone:#E7DFCC; --plate:#FBF7EE;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--paper);color:var(--ink);
+       font-family:"Zilla Slab",Georgia,serif;font-size:15px;line-height:1.5;
+       -webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+  .slab{font-family:"Alfa Slab One",Georgia,serif;font-weight:400}
+  .num{font-variant-numeric:tabular-nums}
+  .lbl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute);font-weight:600}
+
+  /* ── scoreboard strip ─────────────────────────────────────── */
+  .bug{position:sticky;top:0;z-index:30;background:var(--card);border-bottom:3px solid var(--rule)}
+  .bugin{max-width:1180px;margin:0 auto;padding:9px 18px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+  .brand{font-family:"Alfa Slab One",Georgia,serif;font-size:20px;letter-spacing:.01em;text-transform:uppercase;white-space:nowrap}
+  .brand em{font-style:normal;color:var(--red)}
+  .stat{display:flex;flex-direction:column;line-height:1.05}
+  .stat b{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+  .grow{flex:1}
+  .pips{display:flex;gap:5px;align-items:center;height:22px}
+  .pips i{width:11px;height:11px;border-radius:50%;border:2px solid var(--faint)}
+  .pips i.on{background:var(--red);border-color:var(--red)}
+  .pips i.o.on{background:var(--ink);border-color:var(--ink)}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 18px 70px}
+  .board{display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:20px;align-items:start}
+  @media(max-width:860px){.board{grid-template-columns:minmax(0,1fr)}}
+
+  /* ── the card ─────────────────────────────────────────────── */
+  .sheet{border:2px solid var(--rule);background:var(--card)}
+  .sheet > .hd{padding:12px 16px;border-bottom:2px solid var(--rule);display:flex;
+        justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap}
+  .matchup{font-family:"Alfa Slab One",Georgia,serif;font-size:21px;line-height:1.1;text-wrap:balance}
+  .where{font-size:12.5px;color:var(--mute);margin-top:3px}
+  .count{font-family:"Alfa Slab One",Georgia,serif;font-size:30px;line-height:1}
+  .sheet > .bd{padding:16px}
+
+  .zone{position:relative;width:100%;max-width:452px;margin:0 auto}
+  .zone svg{display:block;width:100%;height:auto;border:2px solid var(--rule);background:var(--zone)}
+  .capture{fill:rgba(0,0,0,0);cursor:crosshair}
+  .zone.locked .capture{pointer-events:none;cursor:default}
+  .hov{fill:rgba(30,26,20,.08);pointer-events:none}
+  .pick{fill:rgba(30,26,20,.06);stroke:var(--ink);stroke-width:3;vector-effect:non-scaling-stroke;pointer-events:none}
+  .szbox{fill:none;stroke:var(--ink);stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
+  .szline{fill:none;stroke:rgba(30,26,20,.32);stroke-width:1;vector-effect:non-scaling-stroke;pointer-events:none}
+  .hv{fill:#fff;text-anchor:middle;dominant-baseline:central;pointer-events:none;
+      font-family:"Zilla Slab",serif;font-weight:600;font-size:.135px}
+  .hv.q{font-size:.12px;fill:rgba(30,26,20,.5)}
+  .pm text{font-family:"Zilla Slab",serif;font-weight:700;font-size:.2px;text-anchor:middle;
+      dominant-baseline:central;pointer-events:none}
+  .pm circle{stroke:var(--ink);stroke-width:2;vector-effect:non-scaling-stroke}
+  .dirtnote{position:absolute;left:10px;bottom:10px;color:var(--dirt);pointer-events:none}
+  @media (prefers-reduced-motion:no-preference){
+    .pm.now{animation:pop .4s cubic-bezier(.2,.8,.3,1) both;transform-box:fill-box;transform-origin:center}
+    @keyframes pop{from{transform:scale(.15);opacity:0}to{transform:none;opacity:1}}
+  }
+
+  .arsenal{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;max-width:452px;margin-left:auto;margin-right:auto}
+  .pbtn{border:2px solid var(--rule);padding:7px 11px 7px 9px;min-width:100px;text-align:left;
+        background:var(--paper);display:flex;gap:8px;align-items:flex-start;transition:background .1s}
+  .pbtn:hover:not(:disabled){background:var(--card-2)}
+  .pbtn[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .pbtn[aria-pressed="true"] .full{color:rgba(244,239,227,.7)}
+  .pbtn:disabled{opacity:.4;cursor:default}
+  .dot{width:12px;height:12px;border-radius:50%;margin-top:3px;flex:none;border:1.5px solid var(--ink)}
+  .pbtn .code{font-weight:700;font-size:15px;display:block;line-height:1.1}
+  .pbtn .full{font-size:10.5px;color:var(--mute);display:block;margin-top:1px}
+
+  .callrow{display:flex;gap:12px;align-items:center;margin-top:16px;flex-wrap:wrap;
+           max-width:452px;margin-left:auto;margin-right:auto}
+  .call{background:var(--ink);color:var(--paper);font-family:"Alfa Slab One",Georgia,serif;
+        font-size:17px;letter-spacing:.05em;text-transform:uppercase;padding:11px 28px;border:2px solid var(--ink)}
+  .call:disabled{opacity:.28;cursor:default}
+  .call.ghost{background:var(--paper);color:var(--ink)}
+  .hint{font-size:12.5px;color:var(--mute);flex:1;min-width:150px}
+
+  /* ── verdict ──────────────────────────────────────────────── */
+  .verdict{margin:14px auto 0;max-width:452px;border:2px solid var(--rule);background:var(--paper);padding:12px 14px}
+  .vtop{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .vbig{font-family:"Alfa Slab One",Georgia,serif;font-size:30px;line-height:1}
+  .vbig.good{color:var(--green)} .vbig.bad{color:var(--red)}
+  .chip{font-size:11px;border:1.5px solid var(--hair);padding:2px 7px;font-weight:600;white-space:nowrap}
+  .chip.ok{border-color:var(--green);color:var(--green)}
+  .chip.no{border-color:var(--faint);color:var(--mute)}
+  .chip.bonus{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+  .vline{margin-top:9px;font-size:13.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .vres{margin-top:9px;padding-top:9px;border-top:1.5px solid var(--hair);font-size:13.5px}
+  .vres b{font-family:"Alfa Slab One",Georgia,serif;font-size:15px;text-transform:uppercase}
+
+  /* ── scouting rack ────────────────────────────────────────── */
+  .rack{display:grid;gap:12px}
+  .rk{border:2px solid var(--rule);background:var(--card)}
+  .rk > h3{margin:0;padding:7px 10px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+        font-weight:700;border-bottom:2px solid var(--rule);display:flex;justify-content:space-between;
+        align-items:center;gap:8px;background:var(--card-2)}
+  .buy{border:1.5px solid var(--ink);padding:2px 8px;font-size:11px;font-weight:700;white-space:nowrap;background:var(--paper)}
+  .buy:hover:not(:disabled){background:var(--ink);color:var(--paper)}
+  .buy:disabled{opacity:.35;cursor:default}
+  .rk .in{padding:11px}
+  .shut{padding:11px;color:var(--mute);font-size:12.5px;font-style:italic}
+
+  .mix{display:grid;gap:7px}
+  .mixrow{display:grid;grid-template-columns:14px 26px 1fr 34px;gap:7px;align-items:center;font-size:11.5px;font-variant-numeric:tabular-nums}
+  .mixrow i{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--ink)}
+  .bar{height:8px;background:var(--paper);border:1.5px solid var(--hair)}
+  .bar b{display:block;height:100%;background:var(--ink)}
+  .tbl{width:100%;border-collapse:collapse;font-size:11.5px;font-variant-numeric:tabular-nums}
+  .tbl th{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:700;
+          text-align:right;padding:0 0 5px}
+  .tbl th:first-child{text-align:left}
+  .tbl td{padding:3px 0;text-align:right;border-top:1.5px solid var(--hair)}
+  .tbl td:first-child{text-align:left;font-weight:700;display:flex;gap:6px;align-items:center}
+  .tbl td i{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--ink);flex:none}
+  .tbl .none{color:var(--mute);font-style:italic;font-weight:400}
+  .foot{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:600;margin-top:9px}
+
+  /* ── overlays ─────────────────────────────────────────────── */
+  .veil{position:fixed;inset:0;background:rgba(30,26,20,.55);display:flex;align-items:center;
+        justify-content:center;padding:20px;z-index:50;overflow:auto}
+  .modal{background:var(--paper);border:3px solid var(--rule);max-width:620px;width:100%;padding:26px 28px;
+         box-shadow:10px 10px 0 rgba(30,26,20,.25)}
+  .modal h1{font-family:"Alfa Slab One",Georgia,serif;font-size:42px;line-height:.95;margin:0 0 4px;
+            text-transform:uppercase;text-wrap:balance}
+  .modal h1 em{font-style:normal;color:var(--red)}
+  .modal h2{font-family:"Alfa Slab One",Georgia,serif;font-size:19px;margin:22px 0 8px;text-transform:uppercase}
+  .modal p{max-width:62ch;color:var(--ink-2)}
+  .kick{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--mute);font-weight:700;margin:0 0 8px}
+  .rules{display:grid;gap:8px;margin:12px 0 0;padding:0;list-style:none}
+  .rules li{display:grid;grid-template-columns:90px 1fr;gap:12px;font-size:13.5px;align-items:baseline}
+  .rules b{text-align:right;font-weight:700}
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}
+  .tiles div{border:2px solid var(--rule);background:var(--card);padding:11px}
+  .tiles b{display:block;font-family:"Alfa Slab One",Georgia,serif;font-size:24px;line-height:1.1}
+  .grid-out{font-size:17px;line-height:1.5;letter-spacing:.08em;word-break:break-all;margin:4px 0 0}
+  .note{font-size:12px;color:var(--mute);margin-top:18px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);
+         padding:9px 18px;font-weight:700;font-size:13px;z-index:60}
+  .loading{padding:60px 20px;text-align:center;color:var(--mute)}
+</style>
+</head>
+<body>
+
+<div class="bug"><div class="bugin">
+  <span class="brand">Next <em>Pitch</em></span>
+  <span class="stat"><span class="lbl">Runs</span><b id="s-runs">0</b></span>
+  <span class="stat"><span class="lbl">Edge</span><b id="s-edge">10</b></span>
+  <span class="stat"><span class="lbl">Mult</span><b id="s-mult">1.0&times;</b></span>
+  <span class="grow"></span>
+  <span class="stat"><span class="lbl">Strikes</span><span class="pips" id="s-strikes"></span></span>
+  <span class="stat"><span class="lbl">Outs</span><span class="pips" id="s-outs"></span></span>
+</div></div>
+
+<div class="wrap">
+  <div id="loading" class="loading">Loading today&rsquo;s card&hellip;</div>
+  <div class="board" id="board" hidden>
+    <section class="sheet">
+      <div class="hd">
+        <div>
+          <div class="lbl" style="margin-bottom:4px">At the plate</div>
+          <div class="matchup" id="z-match"></div>
+          <div class="where" id="z-where"></div>
+        </div>
+        <div style="text-align:right">
+          <div class="lbl" style="margin-bottom:2px">Count</div>
+          <div class="count" id="z-count">0&ndash;0</div>
+        </div>
+      </div>
+      <div class="bd">
+        <div class="zone" id="zone"></div>
+        <div id="verdict"></div>
+        <div class="arsenal" id="arsenal"></div>
+        <div class="callrow">
+          <button class="call" id="btn-call" disabled>Call it</button>
+          <span class="hint" id="hint"></span>
+        </div>
+      </div>
+    </section>
+    <aside class="rack" id="rack"></aside>
+  </div>
+</div>
+
+<div id="modal"></div>
+
+<script>
+/* ══ Next Pitch ══════════════════════════════════════════════════
+   A daily guessing game built on MLB's public pitch tracking. One
+   pitcher per day; each at-bat is a real plate appearance pulled from
+   somewhere in his career, so the venue, the season and the hitter
+   change every time you step in.
+   ─────────────────────────────────────────────────────────────── */
+
+/* Savant's pitch-type palette. On cream these read as colour chips
+   rather than coloured text — yellow type on paper is unreadable, so
+   the swatch carries the colour and the code stays ink. */
+const PC = {FF:'#D22D49', FA:'#D22D49', SI:'#FE9D00', FT:'#FE9D00', FC:'#933F2C',
+            SL:'#EEE716', SW:'#DDB33A', ST:'#DDB33A', SV:'#93AFD4', CU:'#00D1ED',
+            KC:'#6236CD', CS:'#00D1ED', CH:'#1DBE3A', FS:'#3BACAC', FO:'#55CCAB',
+            SC:'#60DB33', KN:'#3BACAC', EP:'#888888'};
+const pc = c => PC[c] || '#9AA7B4';
+const ink = h => {const n=parseInt(h.slice(1),16);
+  return (0.2126*(n>>16&255)+0.7152*(n>>8&255)+0.0722*(n&255))/255 > 0.55 ? '#1E1A14' : '#FFFFFF';};
+
+/* ── geometry: SVG in feet, y pointing down ───────────────────── */
+const XMIN=-2.35, XMAX=2.35, WIDE=XMAX-XMIN, YTOP=5, HALF=0.83, GROUND=4.90;
+const Y = pz => YTOP - pz;
+const rect = (x,y,w,h) => `M${x} ${y}H${x+w}V${y+h}H${x}Z`;
+
+// MLB's 13-region grid, catcher's view: 01 top-left … 09 bottom-right, 11–14 outside.
+function zoneOf(px,pz,szT,szB){
+  if(px>=-HALF && px<=HALF && pz>=szB && pz<=szT){
+    const col = px < -HALF/3 ? 0 : px <= HALF/3 ? 1 : 2;
+    const t = szB + (szT-szB)*2/3, b = szB + (szT-szB)/3;
+    const row = pz > t ? 0 : pz >= b ? 1 : 2;
+    return String(row*3+col+1).padStart(2,'0');
+  }
+  const mid=(szT+szB)/2;
+  return px < 0 ? (pz > mid ? '11' : '13') : (pz > mid ? '12' : '14');
+}
+const inZone = z => +z < 10;
+const ZK = ['01','02','03','04','05','06','07','08','09','11','12','13','14'];
+const TEMP = {h:'#B3341F', w:'#D2764A', l:'#A79B84', o:'#5C82AE', c:'#2A5590'};
+
+/* Each outside quadrant is the quadrant minus the strike-zone corner it
+   touches — one L-shaped outline, so a selection never reads as a
+   rectangle with a stray line through it. */
+function regions(szT,szB){
+  const zx=-HALF, zw=HALF*2, zy=Y(szT), zh=szT-szB;
+  const ym=Y((szT+szB)/2), yt=zy, yb=zy+zh;
+  const poly = p => 'M'+p.map(q=>q.join(' ')).join('L')+'Z';
+  const out=[
+    {id:'11', out:true, d:poly([[XMIN,0],[0,0],[0,yt],[zx,yt],[zx,ym],[XMIN,ym]])},
+    {id:'12', out:true, d:poly([[0,0],[XMAX,0],[XMAX,ym],[-zx,ym],[-zx,yt],[0,yt]])},
+    {id:'13', out:true, d:poly([[XMIN,ym],[zx,ym],[zx,yb],[0,yb],[0,YTOP],[XMIN,YTOP]])},
+    {id:'14', out:true, d:poly([[0,yb],[-zx,yb],[-zx,ym],[XMAX,ym],[XMAX,YTOP],[0,YTOP]])}];
+  const cw=zw/3, ch=zh/3;
+  for(let r=0;r<3;r++) for(let c=0;c<3;c++)
+    out.push({id:String(r*3+c+1).padStart(2,'0'), out:false, d:rect(zx+c*cw, zy+r*ch, cw, ch),
+              cx:zx+c*cw+cw/2, cy:zy+r*ch+ch/2});
+  return out;
+}
+
+/* Batter and home plate, from the supplied artwork. The path is
+   normalised to unit height with y down, so placing it is one
+   transform. Sized so the frame edge only ever takes the bat. */
+const BATTER_D = "__BATTER_PATH__";
+const BAT_H=4.2, BAT_W=0.3933, BAT_RIGHT=-0.95;
+function batterSVG(rightHanded){
+  const tx = BAT_RIGHT - BAT_W*BAT_H, ty = GROUND - BAT_H;
+  const fig = `<g transform="translate(${tx.toFixed(3)},${ty.toFixed(3)}) scale(${BAT_H})">
+      <path d="${BATTER_D}" fill="var(--ink)"/></g>`;
+  return `<g opacity=".26">${rightHanded ? fig : `<g transform="scale(-1,1)">${fig}</g>`}</g>`;
+}
+function plateSVG(){
+  // 421.79 x 78.59 in the source art; shoulders 43% of the way down, point centred
+  const PW=1.62, PD=PW*0.1863, y0=4.95-PD, sh=y0+PD*0.430, h=PW/2;
+  return `<rect x="${XMIN}" y="${GROUND+0.02}" width="${WIDE}" height="${(YTOP-GROUND-0.02).toFixed(2)}"
+            fill="rgba(154,90,60,.30)"/>
+    <path d="M${-h} ${y0.toFixed(3)}H${h}V${sh.toFixed(3)}L0 4.95L${-h} ${sh.toFixed(3)}Z"
+      fill="var(--plate)" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"
+      vector-effect="non-scaling-stroke"/>`;
+}
+
+/* ── state ────────────────────────────────────────────────────
+   The day's card is a list of at-bats, each from a different game.
+   EDGE is per at-bat: it resets when a new hitter steps in, so the
+   scouting budget is spent inside one plate appearance or lost. */
+let PACK=null, S=null;
+const PRICE={mix:2, hot:3, cnt:3, vp:3};
+const START_EDGE=10, MULT_CAP=8, IN_ZONE_BONUS=2, MAX_OUTS=3;
+
+function newGame(){
+  const q=[];
+  PACK.abs.forEach((a,ai)=>a.p.forEach((_,pi)=>q.push([ai,pi])));
+  S={q, i:0, runs:0, edge:START_EDGE, mult:1, strikes:0, outs:0,
+     pickType:null, pickZone:null, revealed:null, unlocked:{}, log:[], over:false};
+}
+const AT =()=>S.q[S.i];
+const AB =()=>PACK.abs[AT()[0]];
+const PI =()=>AT()[1];
+const P  =()=>AB().p[PI()];
+
+const key = k => `${AT()[0]}:${k}`;         // intel is scoped to the at-bat
+const has = k => !!S.unlocked[key(k)];
+function buy(k){
+  if(has(k) || S.edge < PRICE[k] || S.revealed) return;
+  S.edge -= PRICE[k]; S.unlocked[key(k)] = true; render();
+}
+function mixNow(){                           // his mix in that game, up to this pitch
+  const m = Object.assign({}, AB().mix);
+  for(let i=0;i<PI();i++){ const t=AB().p[i][2]; m[t]=(m[t]||0)+1; }
+  return m;
+}
+
+/* ── zone ─────────────────────────────────────────────────────── */
+function buildZone(){
+  const z=document.getElementById('zone'), p=P(), szT=p[6], szB=p[7];
+  const regs=regions(szT,szB);
+  const ab=AB();
+  const heat = has('hot') && ab.z ? Object.fromEntries(ab.z.split('|').map((v,i)=>[ZK[i],v])) : null;
+  const zx=-HALF, zw=HALF*2, zy=Y(szT), zh=szT-szB;
+  let g='';
+
+  if(heat){
+    for(const r of regs){
+      const v=heat[r.id]; if(!v) continue;
+      g += `<path d="${r.d}" fill="${TEMP[v[0]]}" opacity="${r.out?'.15':'.6'}"/>`;
+    }
+    for(const r of regs) if(!r.out && heat[r.id])
+      g += `<text class="hv" x="${r.cx}" y="${r.cy}">${heat[r.id].slice(1)}</text>`;
+    const corner={'11':[XMIN+.28,.24],'12':[XMAX-.28,.24],'13':[XMIN+.28,YTOP-.34],'14':[XMAX-.28,YTOP-.34]};
+    for(const id of ['11','12','13','14']) if(heat[id])
+      g += `<text class="hv q" x="${corner[id][0]}" y="${corner[id][1]}">${heat[id].slice(1)}</text>`;
+  }
+
+  g += batterSVG(ab.bt[2]==='R');
+  g += `<path class="szline" d="M${zx+zw/3} ${zy}V${zy+zh}M${zx+2*zw/3} ${zy}V${zy+zh}`
+     + `M${zx} ${zy+zh/3}H${zx+zw}M${zx} ${zy+2*zh/3}H${zx+zw}"/>`;
+  g += `<rect class="szbox" x="${zx}" y="${zy}" width="${zw}" height="${zh}"/>`;
+  g += plateSVG();
+
+  ab.p.slice(0, PI()).forEach((q2,i)=>{ g += marker(q2, i+1, .16, .42, false); });
+  if(S.revealed) g += marker(S.revealed, PI()+1, .21, 1, true);
+
+  // Hover and selection are drawn, never hit-tested: one transparent rect
+  // takes the pointer and the click resolves through zoneOf — the same
+  // function that grades the answer — so the two cannot drift apart.
+  const shape=Object.fromEntries(regs.map(r=>[r.id,r]));
+  const draw=(cls,id)=> id&&shape[id] ? `<path class="${cls}" d="${shape[id].d}"/>` : '';
+  g += `<path class="hov" id="hovpath" d=""/>` + draw('pick', S.pickZone);
+  g += `<rect class="capture" x="${XMIN}" y="0" width="${WIDE}" height="${YTOP}"/>`;
+
+  z.innerHTML = `<svg viewBox="${XMIN} 0 ${WIDE} ${YTOP}" tabindex="0" role="application"
+        aria-label="Strike zone. Click to place your call, or use the arrow keys.">${g}</svg>`
+    + (S.revealed && S.revealed[5] < 0.15
+        ? `<div class="dirtnote lbl">In the dirt &mdash; ${S.revealed[5].toFixed(2)} ft</div>` : '');
+  z.classList.toggle('locked', !!S.revealed);
+
+  const svg=z.querySelector('svg'), hov=z.querySelector('#hovpath');
+  const at = ev => {
+    const m=svg.getScreenCTM(); if(!m) return null;
+    const pt=svg.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY;
+    const u=pt.matrixTransform(m.inverse());
+    return zoneOf(u.x, YTOP-u.y, szT, szB);
+  };
+  if(!S.revealed){
+    svg.addEventListener('pointermove', e=>{
+      const id=at(e); hov.setAttribute('d', id&&shape[id] ? shape[id].d : '');
+    });
+    svg.addEventListener('pointerleave', ()=>hov.setAttribute('d',''));
+    svg.addEventListener('click', e=>{ const id=at(e); if(id){ S.pickZone=id; render(); } });
+    const ORDER=['11','01','02','03','12','04','05','06','07','08','09','13','14'];
+    svg.addEventListener('keydown', e=>{
+      const i=ORDER.indexOf(S.pickZone);
+      if(e.key==='ArrowRight'||e.key==='ArrowDown') S.pickZone=ORDER[(i+1)%ORDER.length]||ORDER[0];
+      else if(e.key==='ArrowLeft'||e.key==='ArrowUp') S.pickZone=ORDER[(i<=0?ORDER.length:i)-1];
+      else return;
+      e.preventDefault(); render(); requestAnimationFrame(()=>document.querySelector('#zone svg').focus());
+    });
+  }
+
+  function marker(q2,n,r,op,now){
+    const x=Math.max(XMIN+r, Math.min(XMAX-r, q2[4])), y=Math.max(r, Math.min(YTOP-r, Y(q2[5])));
+    const col=pc(q2[2]);
+    return `<g class="pm${now?' now':''}" opacity="${op}">
+      <circle cx="${x}" cy="${y}" r="${r}" fill="${col}"/>
+      <text x="${x}" y="${y}" fill="${ink(col)}">${n}</text></g>`;
+  }
+}
+
+/* ── scouting rack ────────────────────────────────────────────── */
+function buildRack(){
+  const ab=AB(), shut=!!S.revealed;
+  const panel=(k,title,body)=>{
+    const open=has(k), afford=S.edge>=PRICE[k];
+    return `<section class="rk"><h3>${title}${open?'':
+      `<button class="buy" data-buy="${k}" ${(!afford||shut)?'disabled':''}>${PRICE[k]} EDGE</button>`}</h3>
+      ${open?`<div class="in">${body()}</div>`
+            :`<div class="shut">${shut?'The pitch is in. Too late.'
+              :afford?`${PRICE[k]} EDGE to open.`:`You need ${PRICE[k]-S.edge} more EDGE.`}</div>`}</section>`;
+  };
+  const chip=c=>`<i style="background:${pc(c)}"></i>`;
+
+  const mixBody=()=>{
+    const m=mixNow(), tot=Object.values(m).reduce((a,b)=>a+b,0);
+    if(!tot) return `<span class="shut" style="padding:0">First batter he faced that day &mdash; nothing thrown yet.</span>`;
+    return `<div class="mix">`+Object.entries(m).sort((a,b)=>b[1]-a[1]).map(([c,n])=>
+      `<div class="mixrow">${chip(c)}<span>${c}</span>
+        <span class="bar"><b style="width:${(n/tot*100).toFixed(1)}%"></b></span>
+        <span style="text-align:right">${(n/tot*100).toFixed(0)}%</span></div>`).join('')
+      + `</div><div class="foot">${tot} pitches earlier that game</div>`;
+  };
+  const cntBody=()=>{
+    const k=`${P()[0]}-${P()[1]}`, row=PACK.counts&&PACK.counts[k];
+    if(!row) return `<span class="shut" style="padding:0">No book on this count.</span>`;
+    return `<div class="mix">`+row[1].map(([c,pctv])=>
+      `<div class="mixrow">${chip(c)}<span>${c}</span>
+        <span class="bar"><b style="width:${pctv}%"></b></span>
+        <span style="text-align:right">${pctv}%</span></div>`).join('')
+      + `</div><div class="foot">${k} counts &middot; ${row[0]} pitches on file</div>`;
+  };
+  const hotBody=()=>`<span style="font-size:12.5px;color:var(--ink-2)">Batting average by zone that season,
+      painted on the strike zone. Red is where he does damage.</span>`;
+  const vpBody=()=>{
+    const rate=s=>String(s).replace(/^0\./,'.');
+    if(ab.vp && ab.vp.length){
+      const rows=Object.fromEntries(ab.vp.map(v=>[v[0],v]));
+      const body=Object.keys(ab.arsenal).map(t=>{
+        const v=rows[t];
+        if(!v) return `<tr><td>${chip(t)}${t}</td><td colspan="3" class="none">no split</td></tr>`;
+        return `<tr title="${v[1]} PA"><td>${chip(t)}${t}</td>
+          <td>${rate(v[3])}</td><td>${rate(v[4])}</td><td>${v[5]}%</td></tr>`;
+      }).join('');
+      const pas=ab.vp.map(v=>v[1]);
+      return `<table class="tbl"><thead><tr><th>Pitch</th><th>SLG</th><th>wOBA</th><th>Whiff</th></tr></thead>
+        <tbody>${body}</tbody></table>
+        <div class="foot">${Math.min(...pas)}&ndash;${Math.max(...pas)} PA per pitch, ${ab.season}</div>`;
+    }
+    if(ab.sl){
+      const s=ab.sl;
+      return `<table class="tbl"><thead><tr><th>Line</th><th>AVG</th><th>OBP</th><th>SLG</th></tr></thead>
+        <tbody><tr><td>${ab.season}</td><td>${s[0]}</td><td>${s[1]}</td><td>${s[2]}</td></tr></tbody></table>
+        <div class="foot">${s[4]} HR &middot; ${s[6]} BB &middot; ${s[5]} K in ${s[7]} PA</div>
+        <div class="foot" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--ink-2)">
+          Pitch-type splits only exist from 2017 on, so this is his season line instead.</div>`;
+    }
+    return `<span class="shut" style="padding:0">Nothing on file for ${ab.season}.</span>`;
+  };
+
+  document.getElementById('rack').innerHTML =
+      `<div class="lbl" style="margin:2px 0 -2px 2px">Scouting &mdash; ${S.edge} EDGE this at-bat</div>`
+    + panel('cnt','In this count', cntBody)
+    + panel('hot','Hot &amp; cold zones', hotBody)
+    + panel('mix','His mix that game', mixBody)
+    + panel('vp', (ab.vp && ab.vp.length) ? 'Batter vs pitch type' : `Batter, ${ab.season}`, vpBody);
+  document.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buy(b.dataset.buy));
+}
+
+/* ── render ───────────────────────────────────────────────────── */
+const ORD = n => n+(['th','st','nd','rd'][n%10>3||(n%100>10&&n%100<14)?0:n%10]||'th');
+const ONBASE = {Empty:'bases empty', Men_On:'runner on', RISP:'runner in scoring position', Loaded:'bases loaded'};
+
+function render(){
+  if(S.over) return;
+  const ab=AB(), p=P();
+  document.getElementById('s-runs').textContent=S.runs;
+  document.getElementById('s-edge').textContent=S.edge;
+  const mEl=document.getElementById('s-mult');
+  mEl.innerHTML=S.mult.toFixed(1)+'&times;';
+  mEl.style.color = S.mult>=MULT_CAP ? 'var(--red)' : '';
+  document.getElementById('s-strikes').innerHTML=[0,1,2].map(i=>`<i class="${i<S.strikes?'on':''}"></i>`).join('');
+  document.getElementById('s-outs').innerHTML=[0,1,2].map(i=>`<i class="o ${i<S.outs?'on':''}"></i>`).join('');
+
+  document.getElementById('z-match').innerHTML =
+    `${ab.bt[1]} <span style="color:var(--mute);font-size:15px">(${ab.bt[2]}HH)</span>`;
+  document.getElementById('z-where').textContent =
+    `${PACK.pitcher.name} · ${ab.away} at ${ab.home} · ${ab.venue} · ${ab.date} · `
+    + `${ab.top?'top':'bot'} ${ORD(ab.inning)}, ${ab.o} out${ab.o===1?'':'s'}, ${ONBASE[ab.on]||ab.on}`;
+  document.getElementById('z-count').innerHTML=`${p[0]}&ndash;${p[1]}`;
+
+  document.getElementById('arsenal').innerHTML=Object.entries(ab.arsenal).map(([c,full])=>
+    `<button class="pbtn" data-t="${c}" aria-pressed="${S.pickType===c}" ${S.revealed?'disabled':''}>
+       <i class="dot" style="background:${pc(c)}"></i>
+       <span><span class="code">${c}</span><span class="full">${full}</span></span></button>`).join('');
+  document.querySelectorAll('.pbtn').forEach(b=>b.onclick=()=>{S.pickType=b.dataset.t;render();});
+
+  buildZone(); buildRack();
+
+  const btn=document.getElementById('btn-call'), hint=document.getElementById('hint');
+  if(S.revealed){
+    btn.textContent = isLast() ? (S.outs>=MAX_OUTS?'Three outs':'Finish') : 'Next pitch';
+    btn.className='call ghost'; btn.disabled=false; btn.onclick=advance; hint.textContent='';
+  }else{
+    btn.textContent='Call it'; btn.className='call';
+    btn.disabled=!(S.pickType&&S.pickZone); btn.onclick=submit;
+    hint.textContent = !S.pickType ? 'Pick a pitch type, then click a spot on the zone.'
+      : !S.pickZone ? 'Now the spot. The nine squares inside the zone pay a bonus.'
+      : 'Lock it in.';
+  }
+  document.getElementById('verdict').innerHTML = S.revealed ? verdictHTML() : '';
+}
+
+const isLast = () => S.outs>=MAX_OUTS || S.i===S.q.length-1;
+
+function verdictHTML(){
+  const v=S.lastResult, col=pc(v.type), left=MAX_OUTS-S.outs;
+  return `<div class="verdict">
+    <div class="vtop">
+      <span class="vbig ${v.runs?'good':'bad'}">${v.runs?'+'+v.runs:v.rang?'OUT':'STRIKE'}</span>
+      <span class="chip ${v.tOK?'ok':'no'}">Type ${v.tOK?'✓':'✗'} ${v.type}</span>
+      <span class="chip ${v.zOK?'ok':'no'}">Zone ${v.zOK?'✓':'✗'} ${v.zone}</span>
+      ${v.runs?`<span class="chip">${v.base} × ${v.multUsed.toFixed(1)}</span>`:''}
+      ${v.bonus?`<span class="chip bonus">In-zone +${IN_ZONE_BONUS} mult</span>`:''}
+      ${v.edge?`<span class="chip ok">+${v.edge} EDGE</span>`:''}
+      ${v.rang?`<span class="chip no">${left} out${left===1?'':'s'} left</span>`:''}
+    </div>
+    <div class="vline"><i class="dot" style="background:${col};margin:0"></i>
+      <b>${v.full} ${v.velo} mph</b> &mdash; ${v.desc}</div>
+    ${v.res?`<div class="vres"><b>${v.res[0]}</b>
+      <div style="color:var(--ink-2);margin-top:3px">${v.res[1]}</div></div>`:''}
+  </div>`;
+}
+
+function submit(){
+  const p=P(), ab=AB();
+  const zone=zoneOf(p[4],p[5],p[6],p[7]);
+  const tOK=S.pickType===p[2], zOK=S.pickZone===zone;
+  const base = tOK&&zOK ? 3 : (tOK||zOK) ? 1 : 0;
+  const multUsed=S.mult;
+  const runs = base ? Math.round(base*multUsed) : 0;
+  const edge = tOK&&zOK ? 3 : base ? 1 : 0;
+  // Calling one of the nine squares inside the zone is far harder than one of
+  // the four big areas outside it, so it pays a flat multiplier bonus.
+  const bonus = zOK && inZone(zone) ? IN_ZONE_BONUS : 0;
+
+  S.runs+=runs; S.edge+=edge;
+  let rang=false;
+  if(base) S.mult=Math.min(MULT_CAP, Math.round((S.mult*1.5+bonus)*100)/100);
+  else { S.strikes++; S.mult=1; if(S.strikes>=3){ S.strikes=0; S.outs++; rang=true; } }
+  S.log.push(tOK&&zOK?'B':base?'H':'X');
+  S.lastResult={runs, base, multUsed, edge, bonus, rang, tOK, zOK, zone,
+    type:p[2], full:ab.arsenal[p[2]], velo:p[3], desc:p[9],
+    res: PI()===ab.p.length-1 ? ab.res : null};
+  S.revealed=p;
+  render();
+}
+
+function advance(){
+  if(isLast()){ S.over=true; showFinal(); return; }
+  const fromAB=AT()[0];
+  S.revealed=null; S.pickType=null; S.pickZone=null;
+  S.i++;
+  if(AT()[0]!==fromAB){ S.edge=START_EDGE; showStepIn(); return; }  // new hitter, fresh budget
+  render();
+}
+
+/* ── screens ──────────────────────────────────────────────────── */
+const modal=document.getElementById('modal');
+const closeModal=()=>{modal.innerHTML='';};
+
+function showIntro(){
+  const P0=PACK.pitcher, span=`${P0.car.from}–${P0.car.to}`;
+  modal.innerHTML=`<div class="veil"><div class="modal">
+    <p class="kick">${PACK.date} &middot; today&rsquo;s arm</p>
+    <h1>Next <em>Pitch</em></h1>
+    <p>Today it is <b>${P0.name}</b>, ${P0.hand}HP, ${span}. Every at-bat on the card is a real
+    plate appearance from somewhere in his career &mdash; different year, different ballpark,
+    different hitter. Before each pitch, call the <b>type</b> and the <b>spot</b>.</p>
+    <h2>Scoring</h2>
+    <ul class="rules">
+      <li><b>1 run</b><span>Right type, wrong spot &mdash; or the reverse.</span></li>
+      <li><b>3 runs</b><span>Both right.</span></li>
+      <li><b>&times;1.5</b><span>Every scoring call multiplies the next one.</span></li>
+      <li><b>+2 mult</b><span>Bonus for calling one of the nine squares inside the zone rather than
+        one of the four big areas outside it. Tops out at &times;${MULT_CAP}.</span></li>
+      <li><b>Strike</b><span>Miss both. Three strikes is an out; three outs ends the day.</span></li>
+    </ul>
+    <h2>Edge</h2>
+    <p>Each at-bat starts with <b>${START_EDGE} EDGE</b>, and you earn more by being right &mdash; 1 for a
+    partial call, 3 for both. Spend it on the scouting rack: what he throws in this count, the
+    hitter&rsquo;s hot and cold zones, his pitch mix earlier that game, how this hitter handles each
+    pitch. <b>Unspent EDGE does not carry</b> &mdash; a new hitter means a new budget, so use it.</p>
+    <div class="callrow" style="max-width:none"><button class="call" id="go">Play ball</button></div>
+    <p class="note">Every pitch, location and split is real, from MLB&rsquo;s public data. Zones follow
+    MLB&rsquo;s 13-region scheme in the catcher&rsquo;s view, so a right-handed hitter stands on the left.</p>
+  </div></div>`;
+  document.getElementById('go').onclick=()=>{closeModal();render();};
+}
+
+function showStepIn(){
+  const ab=AB();
+  modal.innerHTML=`<div class="veil"><div class="modal">
+    <p class="kick">${ab.date} &middot; ${ab.venue}</p>
+    <h1>${ab.bt[1]}</h1>
+    <p>${ab.bt[2]==='R'?'Right':'Left'}-handed, batting for the ${ab.top?ab.awayName:ab.homeName} in the
+    ${ab.top?'top':'bottom'} of the ${ORD(ab.inning)} &mdash; ${ab.o} out${ab.o===1?'':'s'},
+    ${ONBASE[ab.on]||ab.on}. ${ab.season} ${PACK.pitcher.name} on the mound.</p>
+    <div class="tiles">
+      <div><span class="lbl">Runs</span><b>${S.runs}</b></div>
+      <div><span class="lbl">Edge</span><b>${START_EDGE}</b></div>
+      <div><span class="lbl">Outs</span><b>${S.outs}<span style="font-size:15px;color:var(--mute)"> / ${MAX_OUTS}</span></b></div>
+    </div>
+    <p class="note">Fresh EDGE for this hitter. Whatever you had left is gone.</p>
+    <div class="callrow" style="max-width:none"><button class="call" id="go">Step in</button></div>
+  </div></div>`;
+  document.getElementById('go').onclick=()=>{closeModal();render();};
+}
+
+function showFinal(){
+  const grid=S.log.map(c=>c==='B'?'\u{1F7E9}':c==='H'?'\u{1F7E8}':'⬛').join('');
+  const both=S.log.filter(c=>c==='B').length, part=S.log.filter(c=>c==='H').length;
+  const seen=new Set(S.q.slice(0,S.i+1).map(x=>x[0])).size;
+  modal.innerHTML=`<div class="veil"><div class="modal">
+    <p class="kick">Final &middot; ${PACK.date} &middot; ${PACK.pitcher.name}</p>
+    <h1>${S.runs} run${S.runs===1?'':'s'}</h1>
+    <p>${S.outs>=MAX_OUTS ? `Three outs after ${seen} hitter${seen===1?'':'s'}.`
+       : 'You called every pitch on the card.'}</p>
+    <div class="tiles">
+      <div><span class="lbl">Called both</span><b>${both}</b></div>
+      <div><span class="lbl">Called one</span><b>${part}</b></div>
+      <div><span class="lbl">Pitches</span><b>${S.log.length}</b></div>
+    </div>
+    <p class="grid-out">${grid}</p>
+    <div class="callrow" style="max-width:none;margin-top:20px">
+      <button class="call" id="share">Copy result</button>
+      <button class="call ghost" id="again">Play again</button>
+    </div>
+    <p class="note">Data: MLB Stats API and Baseball Savant. Not affiliated with MLB.</p>
+  </div></div>`;
+  document.getElementById('again').onclick=()=>{newGame();closeModal();render();};
+  document.getElementById('share').onclick=()=>{
+    const txt=`Next Pitch — ${PACK.date}\n${PACK.pitcher.name}\n${S.runs} runs · ${both} perfect calls · ${S.log.length} pitches\n${grid}`;
+    (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(toast,toast);
+  };
+}
+function toast(){
+  const t=document.createElement('div'); t.className='toast'; t.textContent='Result copied';
+  document.body.appendChild(t); setTimeout(()=>t.remove(),1800);
+}
+
+/* ── boot ─────────────────────────────────────────────────────
+   A bundled build inlines the pack as window.__PACK. Served from a
+   web root it fetches today's card instead, falling back to the most
+   recent one so the game is never empty. */
+async function boot(){
+  try{
+    if(window.__PACK){ PACK=window.__PACK; }
+    else{
+      const idx=await (await fetch('data/packs/index.json')).json();
+      const today=new Date().toISOString().slice(0,10);
+      const pick=idx.packs.includes(today) ? today : idx.latest;
+      PACK=await (await fetch(`data/packs/${pick}.json`)).json();
+    }
+    document.getElementById('loading').hidden=true;
+    document.getElementById('board').hidden=false;
+    newGame(); render(); showIntro();
+  }catch(e){
+    document.getElementById('loading').innerHTML =
+      `Could not load today&rsquo;s card.<br><span style="font-size:13px">${e.message}</span><br>
+       <span style="font-size:13px">If you opened this file directly, use the bundled build in
+       <code>dist/</code> or serve the folder over http.</span>`;
+  }
+}
+boot();
+</script>
+</body>
+</html>

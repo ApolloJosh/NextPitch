@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Next Pitch</title>
+<meta name="description" content="A daily baseball guessing game. One pitcher, at-bats from across his career, and one question every pitch: what's coming?">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Zilla+Slab:wght@400;500;600;700&display=swap">
+<style>
+  /* ── Ballpark Print ───────────────────────────────────────────
+     A scorecard you'd buy at the gate: cream stock, ink-black rules,
+     slab type. Deliberately one visual world, so every colour is
+     painted explicitly rather than inherited from the viewer's theme. */
+  :root{
+    --paper:#F4EFE3; --card:#EDE6D6; --card-2:#E4DAC5;
+    --ink:#1E1A14; --ink-2:#4A4238; --mute:#6B6355; --faint:#A3998A;
+    --rule:#1E1A14; --hair:rgba(30,26,20,.22);
+    --red:#B3341F; --green:#1F6B45; --dirt:#9A5A3C;
+    --zone:#E7DFCC; --plate:#FBF7EE;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--paper);color:var(--ink);
+       font-family:"Zilla Slab",Georgia,serif;font-size:15px;line-height:1.5;
+       -webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+  .slab{font-family:"Alfa Slab One",Georgia,serif;font-weight:400}
+  .num{font-variant-numeric:tabular-nums}
+  .lbl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute);font-weight:600}
+
+  /* ── scoreboard strip ─────────────────────────────────────── */
+  .bug{position:sticky;top:0;z-index:30;background:var(--card);border-bottom:3px solid var(--rule)}
+  .bugin{max-width:1180px;margin:0 auto;padding:9px 18px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+  .brand{font-family:"Alfa Slab One",Georgia,serif;font-size:20px;letter-spacing:.01em;text-transform:uppercase;white-space:nowrap}
+  .brand em{font-style:normal;color:var(--red)}
+  .stat{display:flex;flex-direction:column;line-height:1.05}
+  .stat b{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+  .grow{flex:1}
+  .pips{display:flex;gap:5px;align-items:center;height:22px}
+  .pips i{width:11px;height:11px;border-radius:50%;border:2px solid var(--faint)}
+  .pips i.on{background:var(--red);border-color:var(--red)}
+  .pips i.o.on{background:var(--ink);border-color:var(--ink)}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 18px 70px}
+  .board{display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:20px;align-items:start}
+  @media(max-width:860px){.board{grid-template-columns:minmax(0,1fr)}}
+
+  /* ── the card ─────────────────────────────────────────────── */
+  .sheet{border:2px solid var(--rule);background:var(--card)}
+  .sheet > .hd{padding:12px 16px;border-bottom:2px solid var(--rule);display:flex;
+        justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap}
+  .matchup{font-family:"Alfa Slab One",Georgia,serif;font-size:21px;line-height:1.1;text-wrap:balance}
+  .where{font-size:12.5px;color:var(--mute);margin-top:3px}
+  .count{font-family:"Alfa Slab One",Georgia,serif;font-size:30px;line-height:1}
+  .sheet > .bd{padding:16px}
+
+  .zone{position:relative;width:100%;max-width:452px;margin:0 auto}
+  .zone svg{display:block;width:100%;height:auto;border:2px solid var(--rule);background:var(--zone)}
+  .capture{fill:rgba(0,0,0,0);cursor:crosshair}
+  .zone.locked .capture{pointer-events:none;cursor:default}
+  .hov{fill:rgba(30,26,20,.08);pointer-events:none}
+  .pick{fill:rgba(30,26,20,.06);stroke:var(--ink);stroke-width:3;vector-effect:non-scaling-stroke;pointer-events:none}
+  .szbox{fill:none;stroke:var(--ink);stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
+  .szline{fill:none;stroke:rgba(30,26,20,.32);stroke-width:1;vector-effect:non-scaling-stroke;pointer-events:none}
+  .hv{fill:#fff;text-anchor:middle;dominant-baseline:central;pointer-events:none;
+      font-family:"Zilla Slab",serif;font-weight:600;font-size:.135px}
+  .hv.q{font-size:.12px;fill:rgba(30,26,20,.5)}
+  .pm text{font-family:"Zilla Slab",serif;font-weight:700;font-size:.2px;text-anchor:middle;
+      dominant-baseline:central;pointer-events:none}
+  .pm circle{stroke:var(--ink);stroke-width:2;vector-effect:non-scaling-stroke}
+  .dirtnote{position:absolute;left:10px;bottom:10px;color:var(--dirt);pointer-events:none}
+  @media (prefers-reduced-motion:no-preference){
+    .pm.now{animation:pop .4s cubic-bezier(.2,.8,.3,1) both;transform-box:fill-box;transform-origin:center}
+    @keyframes pop{from{transform:scale(.15);opacity:0}to{transform:none;opacity:1}}
+  }
+
+  .arsenal{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;max-width:452px;margin-left:auto;margin-right:auto}
+  .pbtn{border:2px solid var(--rule);padding:7px 11px 7px 9px;min-width:100px;text-align:left;
+        background:var(--paper);display:flex;gap:8px;align-items:flex-start;transition:background .1s}
+  .pbtn:hover:not(:disabled){background:var(--card-2)}
+  .pbtn[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .pbtn[aria-pressed="true"] .full{color:rgba(244,239,227,.7)}
+  .pbtn:disabled{opacity:.4;cursor:default}
+  .dot{width:12px;height:12px;border-radius:50%;margin-top:3px;flex:none;border:1.5px solid var(--ink)}
+  .pbtn .code{font-weight:700;font-size:15px;display:block;line-height:1.1}
+  .pbtn .full{font-size:10.5px;color:var(--mute);display:block;margin-top:1px}
+
+  .callrow{display:flex;gap:12px;align-items:center;margin-top:16px;flex-wrap:wrap;
+           max-width:452px;margin-left:auto;margin-right:auto}
+  .call{background:var(--ink);color:var(--paper);font-family:"Alfa Slab One",Georgia,serif;
+        font-size:17px;letter-spacing:.05em;text-transform:uppercase;padding:11px 28px;border:2px solid var(--ink)}
+  .call:disabled{opacity:.28;cursor:default}
+  .call.ghost{background:var(--paper);color:var(--ink)}
+  .hint{font-size:12.5px;color:var(--mute);flex:1;min-width:150px}
+
+  /* ── verdict ──────────────────────────────────────────────── */
+  .verdict{margin:14px auto 0;max-width:452px;border:2px solid var(--rule);background:var(--paper);padding:12px 14px}
+  .vtop{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .vbig{font-family:"Alfa Slab One",Georgia,serif;font-size:30px;line-height:1}
+  .vbig.good{color:var(--green)} .vbig.bad{color:var(--red)}
+  .chip{font-size:11px;border:1.5px solid var(--hair);padding:2px 7px;font-weight:600;white-space:nowrap}
+  .chip.ok{border-color:var(--green);color:var(--green)}
+  .chip.no{border-color:var(--faint);color:var(--mute)}
+  .chip.bonus{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+  .vline{margin-top:9px;font-size:13.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .vres{margin-top:9px;padding-top:9px;border-top:1.5px solid var(--hair);font-size:13.5px}
+  .vres b{font-family:"Alfa Slab One",Georgia,serif;font-size:15px;text-transform:uppercase}
+
+  /* ── scouting rack ────────────────────────────────────────── */
+  .rack{display:grid;gap:12px}
+  .rk{border:2px solid var(--rule);background:var(--card)}
+  .rk > h3{margin:0;padding:7px 10px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+        font-weight:700;border-bottom:2px solid var(--rule);display:flex;justify-content:space-between;
+        align-items:center;gap:8px;background:var(--card-2)}
+  .buy{border:1.5px solid var(--ink);padding:2px 8px;font-size:11px;font-weight:700;white-space:nowrap;background:var(--paper)}
+  .buy:hover:not(:disabled){background:var(--ink);color:var(--paper)}
+  .buy:disabled{opacity:.35;cursor:default}
+  .rk .in{padding:11px}
+  .shut{padding:11px;color:var(--mute);font-size:12.5px;font-style:italic}
+
+  .mix{display:grid;gap:7px}
+  .mixrow{display:grid;grid-template-columns:14px 26px 1fr 34px;gap:7px;align-items:center;font-size:11.5px;font-variant-numeric:tabular-nums}
+  .mixrow i{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--ink)}
+  .bar{height:8px;background:var(--paper);border:1.5px solid var(--hair)}
+  .bar b{display:block;height:100%;background:var(--ink)}
+  .tbl{width:100%;border-collapse:collapse;font-size:11.5px;font-variant-numeric:tabular-nums}
+  .tbl th{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:700;
+          text-align:right;padding:0 0 5px}
+  .tbl th:first-child{text-align:left}
+  .tbl td{padding:3px 0;text-align:right;border-top:1.5px solid var(--hair)}
+  .tbl td:first-child{text-align:left;font-weight:700;display:flex;gap:6px;align-items:center}
+  .tbl td i{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--ink);flex:none}
+  .tbl .none{color:var(--mute);font-style:italic;font-weight:400}
+  .foot{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:600;margin-top:9px}
+
+  /* ── overlays ─────────────────────────────────────────────── */
+  .veil{position:fixed;inset:0;background:rgba(30,26,20,.55);display:flex;align-items:center;
+        justify-content:center;padding:20px;z-index:50;overflow:auto}
+  .modal{background:var(--paper);border:3px solid var(--rule);max-width:620px;width:100%;padding:26px 28px;
+         box-shadow:10px 10px 0 rgba(30,26,20,.25)}
+  .modal h1{font-family:"Alfa Slab One",Georgia,serif;font-size:42px;line-height:.95;margin:0 0 4px;
+            text-transform:uppercase;text-wrap:balance}
+  .modal h1 em{font-style:normal;color:var(--red)}
+  .modal h2{font-family:"Alfa Slab One",Georgia,serif;font-size:19px;margin:22px 0 8px;text-transform:uppercase}
+  .modal p{max-width:62ch;color:var(--ink-2)}
+  .kick{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--mute);font-weight:700;margin:0 0 8px}
+  .rules{display:grid;gap:8px;margin:12px 0 0;padding:0;list-style:none}
+  .rules li{display:grid;grid-template-columns:90px 1fr;gap:12px;font-size:13.5px;align-items:baseline}
+  .rules b{text-align:right;font-weight:700}
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}
+  .tiles div{border:2px solid var(--rule);background:var(--card);padding:11px}
+  .tiles b{display:block;font-family:"Alfa Slab One",Georgia,serif;font-size:24px;line-height:1.1}
+  .grid-out{font-size:17px;line-height:1.5;letter-spacing:.08em;word-break:break-all;margin:4px 0 0}
+  .note{font-size:12px;color:var(--mute);margin-top:18px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);
+         padding:9px 18px;font-weight:700;font-size:13px;z-index:60}
+  .loading{padding:60px 20px;text-align:center;color:var(--mute)}
+</style>
+</head>
+<body>
+
+<div class="bug"><div class="bugin">
+  <span class="brand">Next <em>Pitch</em></span>
+  <span class="stat"><span class="lbl">Runs</span><b id="s-runs">0</b></span>
+  <span class="stat"><span class="lbl">Edge</span><b id="s-edge">10</b></span>
+  <span class="stat"><span class="lbl">Mult</span><b id="s-mult">1.0&times;</b></span>
+  <span class="grow"></span>
+  <span class="stat"><span class="lbl">Strikes</span><span class="pips" id="s-strikes"></span></span>
+  <span class="stat"><span class="lbl">Outs</span><span class="pips" id="s-outs"></span></span>
+</div></div>
+
+<div class="wrap">
+  <div id="loading" class="loading">Loading today&rsquo;s card&hellip;</div>
+  <div class="board" id="board" hidden>
+    <section class="sheet">
+      <div class="hd">
+        <div>
+          <div class="lbl" style="margin-bottom:4px">At the plate</div>
+          <div class="matchup" id="z-match"></div>
+          <div class="where" id="z-where"></div>
+        </div>
+        <div style="text-align:right">
+          <div class="lbl" style="margin-bottom:2px">Count</div>
+          <div class="count" id="z-count">0&ndash;0</div>
+        </div>
+      </div>
+      <div class="bd">
+        <div class="zone" id="zone"></div>
+        <div id="verdict"></div>
+        <div class="arsenal" id="arsenal"></div>
+        <div class="callrow">
+          <button class="call" id="btn-call" disabled>Call it</button>
+          <span class="hint" id="hint"></span>
+        </div>
+      </div>
+    </section>
+    <aside class="rack" id="rack"></aside>
+  </div>
+</div>
+
+<div id="modal"></div>
+
+<script>window.__PACK={"v":1,"date":"2026-09-01","src":"MLB StatsAPI GUMBO + hotColdZones; Savant batter pitch-arsenal splits (2017+ only)","pitcher":{"id":594798,"name":"Jacob deGrom","hand":"R","peak":{"y":2018,"ip":217,"eraPlus":244,"w":10,"era":1.7},"car":{"ip":1271,"w":79,"era":2.81,"from":2015,"to":2026}},"abs":[{"pk":414130,"date":"2015-05-11","season":2015,"venue":"Wrigley Field","away":"NYM","home":"CHC","awayName":"Mets","homeName":"Cubs","inning":1,"top":false,"o":0,"on":"Men_On","bt":[451594,"Dexter Fowler","L"],"arsenal":{"FF":"Four-Seam Fastball","SI":"Sinker","CH":"Changeup","SL":"Slider","CU":"Curveball"},"mix":{},"prev":null,"res":["Hit By Pitch","Dexter Fowler hit by pitch."],"p":[[0,0,"FF",93.8,0.12,1.94,3.47,1.83,"C","Called Strike"],[0,1,"SI",94.1,-1.03,1.21,3.41,1.72,"B","Ball"],[1,1,"FF",94.7,-0.07,2.98,3.51,1.74,"F","Foul"],[1,2,"CH",85.9,0.39,0.34,3.36,1.61,"B","Ball"],[2,2,"SL",90.3,2.13,1.66,3.51,1.74,"H","Hit By Pitch"]],"z":"c.120|l.250|h.300|h.338|h.325|l.228|c.149|h.368|w.286|o.200|l.222|c.109|c.049","vp":null,"sl":[".250",".346",".411",".757",17,154,84,690]},{"pk":448756,"date":"2016-08-24","season":2016,"venue":"Busch Stadium","away":"NYM","home":"STL","awayName":"Mets","homeName":"Cardinals","inning":1,"top":false,"o":0,"on":"Empty","bt":[572761,"Matt Carpenter","L"],"arsenal":{"FF":"Four-Seam Fastball","SI":"Sinker","SL":"Slider","CU":"Curveball","CH":"Changeup"},"mix":{},"prev":null,"res":["Home Run","Matt Carpenter homers (16) on a fly ball to right center field."],"p":[[0,0,"FF",94.2,-1.029,3.473,3.79,1.86,"B","Ball"],[1,0,"SI",94.4,-0.642,2.628,3.65,1.75,"F","Foul"],[1,1,"FF",95.2,-0.684,3.337,3.75,1.86,"C","Called Strike"],[1,2,"FF",95.7,-2.279,5.373,3.65,1.82,"B","Ball"],[2,2,"FF",94.9,-1.027,4.053,3.63,1.82,"B","Ball"],[3,2,"FF",95.2,-0.335,2.678,3.65,1.75,"E","In play, run(s)"]],"z":"l.250|c.143|l.250|h.362|h.400|h.400|w.281|h.380|o.185|c.111|l.222|c.169|c.133","vp":null,"sl":[".271",".380",".505",".885",21,108,81,566]},{"pk":491727,"date":"2017-08-04","season":2017,"venue":"Citi Field","away":"LAD","home":"NYM","awayName":"Dodgers","homeName":"Mets","inning":1,"top":true,"o":0,"on":"Empty","bt":[621035,"Chris Taylor","R"],"arsenal":{"FF":"Four-Seam Fastball","SI":"Sinker","SL":"Slider","CH":"Changeup","CU":"Curveball"},"mix":{},"prev":null,"res":["Home Run","Chris Taylor homers (14) on a line drive to left center field."],"p":[[0,0,"FF",95.4,0.295,2.315,3.52,1.71,"C","Called Strike"],[0,1,"FF",96,0.254,1.656,3.52,1.68,"C","Called Strike"],[0,2,"SI",96.1,1.335,1.533,3.5,1.67,"B","Ball"],[1,2,"SL",90.5,1.038,1.6,3.52,1.62,"F","Foul"],[1,2,"FF",97.3,0.411,2.303,3.52,1.68,"F","Foul"],[1,2,"FF",96.3,0.454,4.221,3.54,1.74,"B","Ball"],[2,2,"SL",90.3,1.238,0.987,3.45,1.59,"B","Ball"],[3,2,"FF",96.1,0.058,3.583,3.5,1.66,"F","Foul"],[3,2,"FF",96.3,0.264,2.868,3.48,1.64,"E","In play, run(s)"]],"z":"h.348|w.292|w.286|h.455|h.427|w.290|w.294|h.333|o.200|c.000|c.125|c.056|c.155","vp":[["FF",213,"0.302","0.521","0.402",15.7],["SL",111,"0.262","0.505","0.365",37.8],["SI",104,"0.318","0.523","0.422",9.6],["CH",43,"0.275","0.425","0.355",38.3],["CU",39,"0.231","0.359","0.254",36.7]],"sl":null},{"pk":565895,"date":"2019-03-28","season":2019,"venue":"Nationals Park","away":"NYM","home":"WSH","awayName":"Mets","homeName":"Nationals","inning":1,"top":false,"o":1,"on":"Men_On","bt":[607208,"Trea Turner","R"],"arsenal":{"FF":"Four-Seam Fastball","SL":"Slider","CH":"Changeup","SI":"Sinker","CU":"Curveball"},"mix":{"FF":2},"prev":null,"res":["Single","Trea Turner singles on a ground ball to left fielder Brandon Nimmo."],"p":[[0,0,"FF",95.3,0.731,2.594,3.43,1.65,"C","Called Strike"],[0,1,"SL",90.2,1.474,2.031,3.37,1.63,"B","Ball"],[1,1,"FF",95.5,-0.875,2.453,3.22,1.58,"C","Called Strike"],[1,2,"SL",92.1,1.55,1.48,3.1,1.59,"B","Ball"],[2,2,"FF",96.4,1.394,1.957,3.21,1.58,"B","Ball"],[3,2,"SL",91.2,0.29,2.165,3.46,1.59,"F","Foul"],[3,2,"FF",96.6,-0.619,2.084,3.46,1.59,"D","In play, no out"]],"z":"w.269|l.259|l.231|h.341|h.303|h.447|h.400|w.291|w.288|h.393|h.346|l.235|c.156","vp":[["FF",178,"0.329","0.584","0.418",15.6],["SI",119,"0.364","0.636","0.461",14.4],["SL",109,"0.214","0.388","0.294",34.6],["CU",60,"0.259","0.362","0.273",34.9],["CH",49,"0.286","0.405","0.357",31.8]],"sl":null},{"pk":661467,"date":"2022-09-30","season":2022,"venue":"Truist Park","away":"NYM","home":"ATL","awayName":"Mets","homeName":"Braves","inning":1,"top":false,"o":1,"on":"Empty","bt":[621020,"Dansby Swanson","R"],"arsenal":{"FF":"Four-Seam Fastball","CH":"Changeup","SL":"Slider","CU":"Curveball"},"mix":{"FF":3},"prev":null,"res":["Strikeout","Dansby Swanson strikes out swinging."],"p":[[0,0,"FF",98.7,0.67,2.236,3.54,1.67,"F","Foul"],[0,1,"FF",99.8,0.85,1.557,3.54,1.67,"B","Ball"],[1,1,"FF",99.6,0.795,3.228,3.54,1.67,"S","Swinging Strike"],[1,2,"CH",92.8,0.591,1.268,3.54,1.67,"F","Foul"],[1,2,"SL",93.8,1.511,0.952,3.54,1.67,"S","Swinging Strike"]],"z":"h.367|h.310|o.192|h.455|h.363|o.197|w.289|h.347|l.241|l.250|c.097|c.171|c.175","vp":[["FF",229,"0.276","0.542","0.373",25.9],["SL",123,"0.204","0.283","0.259",39.8],["CH",51,"0.229","0.313","0.264",45.5],["CU",51,"0.255","0.298","0.298",29.2]],"sl":null},{"pk":778192,"date":"2025-04-24","season":2025,"venue":"Sutter Health Park","away":"TEX","home":"ATH","awayName":"Rangers","homeName":"Athletics","inning":1,"top":false,"o":0,"on":"Empty","bt":[671732,"Lawrence Butler","L"],"arsenal":{"FF":"Four-Seam Fastball","SL":"Slider","CU":"Curveball","CH":"Changeup"},"mix":{},"prev":null,"res":["Strikeout","Lawrence Butler called out on strikes."],"p":[[0,0,"FF",97.1,-0.104,2.381,3.47,1.69,"S","Swinging Strike"],[0,1,"SL",89.2,0.176,1.027,3.42,1.67,"B","Ball"],[1,1,"SL",87.6,-0.071,1.894,3.42,1.64,"C","Called Strike"],[1,2,"FF",98.1,0.876,2.913,3.35,1.57,"B","Ball"],[2,2,"FF",96.7,0.12,2.041,3.27,1.49,"C","Called Strike"]],"z":"o.217|c.121|c.138|w.280|h.414|h.323|c.158|w.277|o.211|c.176|c.086|c.159|c.156","vp":[["FF",221,"0.237","0.407","0.325",29.2],["CH",115,"0.189","0.311","0.268",38.8],["SL",63,"0.241","0.519","0.371",37.9],["CU",37,"0.235","0.412","0.309",41.5]],"sl":null},{"pk":822902,"date":"2026-05-10","season":2026,"venue":"Globe Life Field","away":"CHC","home":"TEX","awayName":"Cubs","homeName":"Rangers","inning":1,"top":true,"o":1,"on":"Empty","bt":[694208,"Moisés Ballesteros","L"],"arsenal":{"FF":"Four-Seam Fastball","SL":"Slider","CH":"Changeup","CU":"Curveball","SI":"Sinker"},"mix":{"FF":2,"SL":2},"prev":null,"res":["Strikeout","Moisés Ballesteros strikes out swinging."],"p":[[0,0,"FF",97.1,-0.468,2.705,3.04,1.53,"S","Swinging Strike"],[0,1,"SL",92.9,-0.469,1.452,3.04,1.53,"B","Ball"],[1,1,"FF",98.3,0.194,3.046,3.04,1.53,"S","Swinging Strike"],[1,2,"SL",92.6,0.642,1.388,3.04,1.53,"F","Foul"],[1,2,"FF",98.3,-0.689,4.112,3.04,1.53,"B","Ball"],[2,2,"FF",98.1,-0.22,3.801,3.04,1.53,"S","Swinging Strike"]],"z":"l.231|l.227|h.364|l.250|h.400|l.222|o.214|c.095|h.500|c.032|o.190|c.100|c.143","vp":[["FF",79,"0.116","0.217","0.206",38.1],["CH",40,"0.263","0.342","0.309",30.4],["SL",39,"0.167","0.278","0.229",29.1],["SI",36,"0.235","0.294","0.258",11.4],["CU",25,"0.167","0.292","0.216",35.6]],"sl":null},{"pk":414130,"date":"2015-05-11","season":2015,"venue":"Wrigley Field","away":"NYM","home":"CHC","awayName":"Mets","homeName":"Cubs","inning":1,"top":false,"o":0,"on":"Men_On","bt":[624585,"Jorge Soler","R"],"arsenal":{"FF":"Four-Seam Fastball","SI":"Sinker","CH":"Changeup","SL":"Slider","CU":"Curveball"},"mix":{"FF":5,"SI":3,"CH":1,"SL":1},"prev":null,"res":["Walk","Jorge Soler walks."],"p":[[0,0,"SL",91.9,0.61,2.59,3.55,1.64,"C","Called Strike"],[0,1,"SL",91.4,1.51,1.2,3.5,1.59,"B","Ball"],[1,1,"SI",94.6,-1.52,3.02,3.58,1.67,"B","Ball"],[2,1,"SL",90.9,1.56,1.38,3.58,1.62,"B","Ball"],[3,1,"FF",94,2.03,3.05,3.53,1.59,"B","Ball"]],"z":"h.600|h.316|h.400|h.400|w.273|h.350|c.176|h.324|c.152|h.300|l.259|c.050|c.119","vp":null,"sl":[".262",".324",".399",".723",10,121,32,404]},{"pk":448756,"date":"2016-08-24","season":2016,"venue":"Busch Stadium","away":"NYM","home":"STL","awayName":"Mets","homeName":"Cardinals","inning":1,"top":false,"o":1,"on":"Empty","bt":[461235,"Brandon Moss","L"],"arsenal":{"FF":"Four-Seam Fastball","SI":"Sinker","SL":"Slider","CU":"Curveball","CH":"Changeup"},"mix":{"FF":6,"SI":1},"prev":null,"res":["Strikeout","Brandon Moss strikes out swinging."],"p":[[0,0,"SI",95.7,-0.61,0.389,3.51,1.65,"B","Ball"],[1,0,"SI",94.7,-1.835,3.846,3.51,1.62,"B","Ball"],[2,0,"SL",90.2,0.819,1.061,3.4,1.59,"S","Swinging Strike"],[2,1,"SL",91.6,-0.329,1.432,3.25,1.56,"C","Called Strike"],[2,2,"FF",94.9,-0.797,3.522,3.4,1.59,"S","Swinging Strike"]],"z":"c.176|w.261|c.067|w.270|h.482|o.194|w.268|h.333|l.250|c.095|c.000|c.098|c.077","vp":null,"sl":[".225",".300",".484",".784",28,141,39,464]},{"pk":491727,"date":"2017-08-04","season":2017,"venue":"Citi Field","away":"LAD","home":"NYM","awayName":"Dodgers","homeName":"Mets","inning":1,"top":true,"o":0,"on":"RISP","bt":[608369,"Corey Seager","L"],"arsenal":{"FF":"Four-Seam Fastball","SI":"Sinker","SL":"Slider","CH":"Changeup","CU":"Curveball"},"mix":{"FF":6,"SI":1,"SL":2},"prev":null,"res":["Double","Corey Seager doubles (28) on a line drive to left fielder Yoenis Cespedes."],"p":[[0,0,"FF",96,-0.487,4.959,3.59,1.68,"B","Ball"],[1,0,"SL",90,1.186,1.688,3.55,1.58,"S","Swinging Strike"],[1,1,"SL",90.1,0.738,2.251,3.59,1.66,"S","Swinging Strike"],[1,2,"SL",89.5,0.596,2.644,3.61,1.62,"F","Foul"],[1,2,"FF",96.4,-0.416,3.091,3.63,1.58,"D","In play, no out"]],"z":"h.333|l.222|c.143|h.404|h.384|h.438|o.214|h.361|h.308|l.227|l.226|c.120|o.217","vp":[["FF",239,"0.336","0.621","0.441",19.5],["SI",92,"0.321","0.405","0.361",19.4],["SL",89,"0.24","0.413","0.329",37.3],["CH",77,"0.271","0.414","0.333",28.9],["CU",52,"0.267","0.311","0.315",43.3]],"sl":null},{"pk":565895,"date":"2019-03-28","season":2019,"venue":"Nationals Park","away":"NYM","home":"WSH","awayName":"Mets","homeName":"Nationals","inning":1,"top":false,"o":2,"on":"RISP","bt":[665742,"Juan Soto","L"],"arsenal":{"FF":"Four-Seam Fastball","SL":"Slider","CH":"Changeup","SI":"Sinker","CU":"Curveball"},"mix":{"FF":8,"SL":4},"prev":null,"res":["Walk","Juan Soto walks."],"p":[[0,0,"FF",96.2,0.392,1.886,2.99,1.57,"C","Called Strike"],[0,1,"SL",91.9,1.775,1.946,2.99,1.58,"B","Ball"],[1,1,"CH",90.3,0.501,-0.281,3.11,1.47,"*B","Ball In Dirt"],[2,1,"FF",96.8,1.41,2.529,2.95,1.57,"B","Ball"],[3,1,"CH",90.5,0.694,0.986,3.02,1.52,"B","Ball"]],"z":"w.280|h.353|h.414|h.348|h.444|h.320|o.194|h.313|h.321|w.282|c.000|c.051|c.061","vp":[["FF",199,"0.282","0.603","0.431",19.2],["SI",113,"0.351","0.68","0.474",13.4],["SL",101,"0.202","0.321","0.317",33.3],["CH",94,"0.295","0.564","0.412",32.3],["CU",63,"0.296","0.63","0.421",24.3]],"sl":null},{"pk":661467,"date":"2022-09-30","season":2022,"venue":"Truist Park","away":"NYM","home":"ATL","awayName":"Mets","homeName":"Braves","inning":1,"top":false,"o":2,"on":"Empty","bt":[671739,"Michael Harris II","L"],"arsenal":{"FF":"Four-Seam Fastball","CH":"Changeup","SL":"Slider","CU":"Curveball"},"mix":{"FF":6,"CH":1,"SL":1},"prev":null,"res":["Strikeout","Michael Harris II strikes out swinging."],"p":[[0,0,"FF",99.4,-0.168,2.825,3.53,1.59,"F","Foul"],[0,1,"FF",99,1.183,3.024,3.53,1.58,"B","Ball"],[1,1,"FF",98.3,-1.155,1.922,3.53,1.53,"B","Ball"],[2,1,"SL",93.5,0.344,3.103,3.53,1.59,"F","Foul"],[2,2,"SL",92.9,0.583,0.313,3.53,1.59,"W","Swinging Strike (Blocked)"]],"z":"h.364|h.500|w.286|h.520|h.370|h.326|l.238|h.308|h.400|h.353|l.227|c.162|c.167","vp":[["FF",132,"0.375","0.717","0.483",25.4],["SL",68,"0.19","0.317","0.253",39.7],["CH",64,"0.274","0.323","0.282",27.7],["CU",61,"0.25","0.4","0.297",34.9]],"sl":null},{"pk":778192,"date":"2025-04-24","season":2025,"venue":"Sutter Health Park","away":"TEX","home":"ATH","awayName":"Rangers","homeName":"Athletics","inning":2,"top":false,"o":1,"on":"Empty","bt":[668709,"JJ Bleday","L"],"arsenal":{"FF":"Four-Seam Fastball","SL":"Slider","CU":"Curveball","CH":"Changeup"},"mix":{"FF":5,"SL":4,"CU":1},"prev":null,"res":["Strikeout","JJ Bleday strikes out swinging."],"p":[[0,0,"SL",89.5,-0.056,2.634,3.15,1.42,"C","Called Strike"],[0,1,"CH",90.3,-0.103,0.441,3.2,1.47,"B","Ball"],[1,1,"CH",88,-2.329,3.007,3.18,1.47,"B","Ball"],[2,1,"SL",89.8,1.339,1.401,3.35,1.64,"S","Swinging Strike"],[2,2,"FF",98.4,1.113,1.689,3.2,1.49,"B","Ball"],[3,2,"SL",89.9,0.127,1.248,3.35,1.64,"S","Swinging Strike"]],"z":"c.000|c.160|c.000|l.222|h.313|h.414|c.100|w.269|l.231|c.091|h.455|c.074|c.043","vp":[["FF",92,"0.291","0.544","0.395",13.2],["CH",62,"0.083","0.117","0.106",45.9],["SL",50,"0.222","0.422","0.315",39],["CU",24,"0.143","0.429","0.292",33.3]],"sl":null},{"pk":822902,"date":"2026-05-10","season":2026,"venue":"Globe Life Field","away":"CHC","home":"TEX","awayName":"Cubs","homeName":"Rangers","inning":1,"top":true,"o":2,"on":"Empty","bt":[673548,"Seiya Suzuki","R"],"arsenal":{"FF":"Four-Seam Fastball","SL":"Slider","CH":"Changeup","CU":"Curveball","SI":"Sinker"},"mix":{"FF":6,"SL":4},"prev":null,"res":["Strikeout","Seiya Suzuki strikes out swinging."],"p":[[0,0,"SL",92.3,1.105,0.979,3.18,1.6,"B","Ball"],[1,0,"FF",98,0.249,3.588,3.18,1.6,"S","Swinging Strike"],[1,1,"FF",97.9,0.474,2.007,3.18,1.6,"C","Called Strike"],[1,2,"SL",91.2,1.26,0.473,3.18,1.6,"B","Ball"],[2,2,"SL",91.3,0.726,1.604,3.18,1.6,"S","Swinging Strike"]],"z":"h.417|l.258|o.185|h.345|h.471|o.204|h.450|h.326|l.250|l.250|c.100|c.176|c.117","vp":[["FF",150,"0.322","0.585","0.454",18.7],["SI",108,"0.312","0.495","0.413",14.2],["SL",86,"0.237","0.5","0.347",30.9],["CU",39,"0.27","0.432","0.322",29.7],["CH",33,"0.25","0.571","0.374",31.3]],"sl":null},{"pk":414130,"date":"2015-05-11","season":2015,"venue":"Wrigley Field","away":"NYM","home":"CHC","awayName":"Mets","homeName":"Cubs","inning":2,"top":false,"o":0,"on":"Empty","bt":[608365,"Addison Russell","R"],"arsenal":{"FF":"Four-Seam Fastball","SI":"Sinker","CH":"Changeup","SL":"Slider","CU":"Curveball"},"mix":{"FF":9,"SI":6,"CH":1,"SL":6,"CU":3},"prev":null,"res":["Flyout","Addison Russell flies out to center fielder Juan Lagares."],"p":[[0,0,"FF",92.9,0.98,1.81,3.44,1.67,"C","Called Strike"],[0,1,"SL",89.8,1.34,1.29,3.36,1.62,"B","Ball"],[1,1,"SL",88.5,1.11,1.49,3.25,1.65,"S","Swinging Strike"],[1,2,"FF",93,0.05,4.05,3.33,1.59,"B","Ball"],[2,2,"SL",89.2,1.05,1.91,3.25,1.65,"F","Foul"],[2,2,"SI",93.3,-1.51,1.86,3.33,1.56,"B","Ball"],[3,2,"SL",87.9,0.91,1.9,3.25,1.65,"F","Foul"],[3,2,"FF",94.1,0.44,2.46,3.25,1.65,"F","Foul"],[3,2,"FF",93.8,-0.23,2.92,3.25,1.65,"X","In play, out(s)"]],"z":"c.143|h.375|l.222|l.231|h.400|o.182|h.364|w.271|h.366|c.048|c.067|c.120|o.208","vp":null,"sl":[".242",".307",".389",".696",13,149,42,523]},{"pk":448756,"date":"2016-08-24","season":2016,"venue":"Busch Stadium","away":"NYM","home":"STL","awayName":"Mets","homeName":"Cardinals","inning":2,"top":false,"o":0,"on":"RISP","bt":[425877,"Yadier Molina","R"],"arsenal":{"FF":"Four-Seam Fastball","SI":"Sinker","SL":"Slider","CU":"Curveball","CH":"Changeup"},"mix":{"FF":9,"SI":5,"SL":2},"prev":null,"res":["Double","Yadier Molina doubles (29) on a fly ball to right fielder Curtis Granderson."],"p":[[0,0,"SL",87.9,0.477,2.064,3.53,1.62,"S","Swinging Strike"],[0,1,"SL",88.8,1.067,2.655,3.78,1.62,"B","Ball"],[1,1,"CU",81.1,-0.032,0.93,3.53,1.62,"F","Foul"],[1,2,"FF",94.8,0.466,2.906,3.53,1.62,"F","Foul"],[1,2,"SL",88.3,1.058,2.012,3.53,1.62,"F","Foul"],[1,2,"CU",83.2,1.478,-0.261,3.62,1.73,"B","Ball"],[2,2,"SI",87.4,0.374,2.423,3.53,1.62,"D","In play, no out"]],"z":"o.208|w.273|h.333|h.340|w.286|h.408|h.362|h.433|l.238|w.269|h.333|h.324|c.131","vp":null,"sl":[".307",".360",".427",".787",8,63,39,581]},{"pk":491727,"date":"2017-08-04","season":2017,"venue":"Citi Field","away":"LAD","home":"NYM","awayName":"Dodgers","homeName":"Mets","inning":1,"top":true,"o":2,"on":"RISP","bt":[592626,"Joc Pederson","L"],"arsenal":{"FF":"Four-Seam Fastball","SI":"Sinker","SL":"Slider","CH":"Changeup","CU":"Curveball"},"mix":{"FF":10,"SI":1,"SL":9},"prev":null,"res":["Walk","Joc Pederson walks."],"p":[[0,0,"SL",90.7,0.089,0.911,3.36,1.54,"B","Ball"],[1,0,"FF",95.7,-0.436,2.673,3.4,1.51,"S","Swinging Strike"],[1,1,"FF",96.2,-0.997,2.329,3.38,1.58,"B","Ball"],[2,1,"SL",89.8,-1.066,2.394,3.32,1.54,"B","Ball"],[3,1,"CH",86.9,-1.219,2.514,3.28,1.49,"B","Ball"]],"z":"o.200|h.304|h.500|h.300|w.273|c.056|l.226|o.195|w.286|c.071|c.125|c.167|c.053","vp":[["FF",135,"0.204","0.398","0.321",16],["SI",43,"0.111","0.306","0.257",14.5],["SL",41,"0.118","0.265","0.251",36.4],["CU",39,"0.286","0.571","0.395",36.4],["CH",36,"0.29","0.387","0.351",34.9]],"sl":null},{"pk":565895,"date":"2019-03-28","season":2019,"venue":"Nationals Park","away":"NYM","home":"WSH","awayName":"Mets","homeName":"Nationals","inning":2,"top":false,"o":2,"on":"Empty","bt":[453286,"Max Scherzer","R"],"arsenal":{"FF":"Four-Seam Fastball","SL":"Slider","CH":"Changeup","SI":"Sinker","CU":"Curveball"},"mix":{"FF":16,"SL":9,"CH":2},"prev":null,"res":["Strikeout","Max Scherzer called out on strikes."],"p":[[0,0,"FF",96.9,1.092,2.625,3.45,1.62,"C","Called Strike"],[0,1,"SL",91.1,0.54,1.117,3.09,1.58,"B","Ball"],[1,1,"SL",92.2,2.116,2.282,3.16,1.51,"B","Ball"],[2,1,"FF",96.5,-0.122,3.044,3.5,1.6,"S","Swinging Strike"],[2,2,"FF",97.8,0.592,2.058,3.05,1.53,"C","Called Strike"]],"z":"c.000|h.667|l.250|c.167|l.222|c.000|h.333|l.250|o.200|c.000|c.000|h.333|c.000","vp":[["FF",25,"0.273","0.273","0.225",40.9],["SI",11,"0.091","0.091","0.082",21.1],["SL",10,"0.222","0.222","0.225",35.7],["CU",8,"0","0","0",50],["CH",2,"0","0","0",50]],"sl":null}],"zk":"01,02,03,04,05,06,07,08,09,11,12,13,14","tk":"h=hot,w=warm,l=lukewarm,o=cool,c=cold","counts":{"0-0":[114,[["FF",52],["SL",23],["CU",10],["SI",8],["CH",8]]],"0-1":[59,[["SL",36],["FF",32],["CH",14],["CU",10],["SI",8]]],"0-2":[39,[["FF",41],["CH",21],["SI",18],["SL",18],["CU",3]]],"1-0":[55,[["FF",47],["SL",27],["CH",15],["SI",5],["CU",5]]],"1-1":[65,[["FF",42],["SL",34],["CH",17],["SI",5],["CU",3]]],"1-2":[78,[["SL",42],["FF",37],["CH",15],["CU",4],["SI",1]]],"2-0":[26,[["FF",58],["SL",31],["CH",12]]],"2-1":[43,[["FF",44],["SL",37],["CH",12],["CU",5],["SI",2]]],"2-2":[93,[["FF",44],["SL",31],["CH",12],["SI",6],["CU",6]]],"3-0":[10,[["FF",80],["SI",20]]],"3-1":[26,[["FF",54],["SL",23],["CH",15],["SI",8]]],"3-2":[60,[["FF",53],["SL",22],["CH",18],["SI",3],["CU",3]]]},"countsN":668,"countsNote":"Across every 5+ pitch at-bat in the games this card was drawn from — the same population the game draws from."};</script>
+<script>
+/* ══ Next Pitch ══════════════════════════════════════════════════
+   A daily guessing game built on MLB's public pitch tracking. One
+   pitcher per day; each at-bat is a real plate appearance pulled from
+   somewhere in his career, so the venue, the season and the hitter
+   change every time you step in.
+   ─────────────────────────────────────────────────────────────── */
+
+/* Savant's pitch-type palette. On cream these read as colour chips
+   rather than coloured text — yellow type on paper is unreadable, so
+   the swatch carries the colour and the code stays ink. */
+const PC = {FF:'#D22D49', FA:'#D22D49', SI:'#FE9D00', FT:'#FE9D00', FC:'#933F2C',
+            SL:'#EEE716', SW:'#DDB33A', ST:'#DDB33A', SV:'#93AFD4', CU:'#00D1ED',
+            KC:'#6236CD', CS:'#00D1ED', CH:'#1DBE3A', FS:'#3BACAC', FO:'#55CCAB',
+            SC:'#60DB33', KN:'#3BACAC', EP:'#888888'};
+const pc = c => PC[c] || '#9AA7B4';
+const ink = h => {const n=parseInt(h.slice(1),16);
+  return (0.2126*(n>>16&255)+0.7152*(n>>8&255)+0.0722*(n&255))/255 > 0.55 ? '#1E1A14' : '#FFFFFF';};
+
+/* ── geometry: SVG in feet, y pointing down ───────────────────── */
+const XMIN=-2.35, XMAX=2.35, WIDE=XMAX-XMIN, YTOP=5, HALF=0.83, GROUND=4.90;
+const Y = pz => YTOP - pz;
+const rect = (x,y,w,h) => `M${x} ${y}H${x+w}V${y+h}H${x}Z`;
+
+// MLB's 13-region grid, catcher's view: 01 top-left … 09 bottom-right, 11–14 outside.
+function zoneOf(px,pz,szT,szB){
+  if(px>=-HALF && px<=HALF && pz>=szB && pz<=szT){
+    const col = px < -HALF/3 ? 0 : px <= HALF/3 ? 1 : 2;
+    const t = szB + (szT-szB)*2/3, b = szB + (szT-szB)/3;
+    const row = pz > t ? 0 : pz >= b ? 1 : 2;
+    return String(row*3+col+1).padStart(2,'0');
+  }
+  const mid=(szT+szB)/2;
+  return px < 0 ? (pz > mid ? '11' : '13') : (pz > mid ? '12' : '14');
+}
+const inZone = z => +z < 10;
+const ZK = ['01','02','03','04','05','06','07','08','09','11','12','13','14'];
+const TEMP = {h:'#B3341F', w:'#D2764A', l:'#A79B84', o:'#5C82AE', c:'#2A5590'};
+
+/* Each outside quadrant is the quadrant minus the strike-zone corner it
+   touches — one L-shaped outline, so a selection never reads as a
+   rectangle with a stray line through it. */
+function regions(szT,szB){
+  const zx=-HALF, zw=HALF*2, zy=Y(szT), zh=szT-szB;
+  const ym=Y((szT+szB)/2), yt=zy, yb=zy+zh;
+  const poly = p => 'M'+p.map(q=>q.join(' ')).join('L')+'Z';
+  const out=[
+    {id:'11', out:true, d:poly([[XMIN,0],[0,0],[0,yt],[zx,yt],[zx,ym],[XMIN,ym]])},
+    {id:'12', out:true, d:poly([[0,0],[XMAX,0],[XMAX,ym],[-zx,ym],[-zx,yt],[0,yt]])},
+    {id:'13', out:true, d:poly([[XMIN,ym],[zx,ym],[zx,yb],[0,yb],[0,YTOP],[XMIN,YTOP]])},
+    {id:'14', out:true, d:poly([[0,yb],[-zx,yb],[-zx,ym],[XMAX,ym],[XMAX,YTOP],[0,YTOP]])}];
+  const cw=zw/3, ch=zh/3;
+  for(let r=0;r<3;r++) for(let c=0;c<3;c++)
+    out.push({id:String(r*3+c+1).padStart(2,'0'), out:false, d:rect(zx+c*cw, zy+r*ch, cw, ch),
+              cx:zx+c*cw+cw/2, cy:zy+r*ch+ch/2});
+  return out;
+}
+
+/* Batter and home plate, from the supplied artwork. The path is
+   normalised to unit height with y down, so placing it is one
+   transform. Sized so the frame edge only ever takes the bat. */
+const BATTER_D = "M 0.199,0.93 C 0.201,0.933 0.206,0.935 0.21,0.937 L 0.234,0.949 L 0.248,0.955 L 0.258,0.96 C 0.265,0.963 0.268,0.965 0.27,0.972 C 0.272,0.976 0.273,0.981 0.268,0.984 C 0.264,0.987 0.26,0.99 0.255,0.992 C 0.232,1 0.202,1.004 0.179,0.995 C 0.171,0.992 0.164,0.992 0.156,0.993 C 0.144,0.995 0.132,0.994 0.12,0.993 C 0.114,0.993 0.109,0.993 0.103,0.99 C 0.094,0.984 0.098,0.964 0.099,0.95 C 0.1,0.939 0.102,0.93 0.105,0.92 L 0.109,0.909 L 0.114,0.894 L 0.118,0.884 L 0.133,0.834 L 0.139,0.81 L 0.146,0.786 L 0.152,0.773 L 0.161,0.756 C 0.165,0.748 0.173,0.742 0.173,0.733 L 0.173,0.685 C 0.173,0.675 0.167,0.665 0.162,0.657 L 0.15,0.641 L 0.145,0.633 L 0.139,0.624 C 0.134,0.619 0.133,0.61 0.128,0.606 L 0.114,0.595 C 0.111,0.593 0.107,0.589 0.105,0.586 C 0.102,0.577 0.098,0.57 0.092,0.562 C 0.089,0.559 0.086,0.553 0.085,0.549 L 0.083,0.536 L 0.082,0.528 C 0.081,0.52 0.081,0.513 0.082,0.505 C 0.083,0.501 0.083,0.495 0.084,0.492 L 0.092,0.475 L 0.1,0.466 C 0.101,0.465 0.104,0.463 0.104,0.461 C 0.108,0.451 0.114,0.447 0.115,0.443 C 0.115,0.439 0.107,0.436 0.11,0.428 L 0.112,0.418 C 0.113,0.412 0.119,0.407 0.121,0.402 C 0.123,0.389 0.124,0.377 0.125,0.364 L 0.127,0.342 L 0.13,0.322 L 0.131,0.305 C 0.131,0.298 0.13,0.291 0.132,0.285 L 0.134,0.274 C 0.136,0.262 0.138,0.25 0.144,0.24 C 0.15,0.221 0.164,0.209 0.181,0.201 C 0.189,0.198 0.195,0.194 0.204,0.193 L 0.219,0.193 C 0.223,0.193 0.225,0.191 0.227,0.189 C 0.23,0.186 0.229,0.183 0.229,0.179 C 0.23,0.165 0.234,0.152 0.232,0.14 L 0.204,0.127 L 0.186,0.12 C 0.175,0.115 0.162,0.106 0.145,0.099 L 0.133,0.094 L 0.118,0.087 L 0.102,0.079 L 0.082,0.069 L 0.063,0.059 C 0.057,0.056 0.052,0.053 0.046,0.05 C 0.041,0.049 0.037,0.046 0.034,0.044 L 0.01,0.032 C 0.001,0.027 -0.002,0.018 0.002,0.009 C 0.004,0.003 0.011,-0.003 0.019,0.001 L 0.081,0.034 L 0.092,0.039 L 0.106,0.046 L 0.133,0.061 L 0.147,0.07 L 0.165,0.08 L 0.195,0.098 L 0.22,0.114 L 0.235,0.122 C 0.238,0.124 0.243,0.126 0.246,0.123 C 0.259,0.113 0.276,0.11 0.292,0.115 C 0.305,0.118 0.318,0.126 0.327,0.136 C 0.332,0.142 0.331,0.151 0.333,0.158 C 0.334,0.164 0.341,0.167 0.344,0.171 C 0.347,0.174 0.35,0.176 0.355,0.176 C 0.362,0.177 0.367,0.18 0.373,0.182 C 0.378,0.184 0.381,0.186 0.384,0.19 C 0.386,0.194 0.391,0.198 0.393,0.202 C 0.394,0.208 0.392,0.215 0.389,0.219 C 0.371,0.244 0.39,0.246 0.39,0.262 L 0.39,0.285 L 0.39,0.302 L 0.391,0.319 L 0.391,0.351 C 0.391,0.355 0.389,0.36 0.386,0.363 C 0.383,0.367 0.378,0.366 0.373,0.367 L 0.356,0.367 C 0.349,0.368 0.342,0.366 0.336,0.365 C 0.328,0.358 0.32,0.353 0.311,0.349 L 0.303,0.352 L 0.297,0.365 L 0.29,0.381 L 0.284,0.4 L 0.279,0.412 C 0.275,0.421 0.273,0.43 0.269,0.439 L 0.26,0.461 L 0.257,0.471 C 0.256,0.474 0.255,0.479 0.256,0.482 C 0.257,0.488 0.252,0.488 0.25,0.49 C 0.238,0.503 0.243,0.521 0.254,0.533 L 0.267,0.556 C 0.274,0.569 0.279,0.584 0.282,0.6 L 0.285,0.617 L 0.287,0.63 L 0.289,0.64 L 0.295,0.661 C 0.299,0.675 0.299,0.688 0.294,0.702 C 0.293,0.712 0.29,0.721 0.285,0.73 L 0.279,0.776 L 0.278,0.792 C 0.277,0.797 0.276,0.802 0.279,0.807 L 0.284,0.816 C 0.287,0.822 0.298,0.83 0.304,0.833 L 0.335,0.846 C 0.338,0.847 0.343,0.847 0.344,0.849 C 0.349,0.854 0.352,0.865 0.343,0.869 L 0.334,0.873 C 0.318,0.878 0.3,0.878 0.284,0.873 C 0.278,0.871 0.272,0.869 0.265,0.869 C 0.254,0.868 0.244,0.87 0.234,0.866 C 0.228,0.863 0.224,0.862 0.218,0.862 C 0.213,0.86 0.208,0.859 0.204,0.863 L 0.196,0.881 C 0.193,0.888 0.191,0.895 0.187,0.901 C 0.185,0.903 0.184,0.908 0.184,0.911 C 0.184,0.915 0.189,0.918 0.191,0.921 L 0.199,0.93 L 0.199,0.93 M 0.32,0.288 L 0.328,0.293 C 0.333,0.296 0.338,0.294 0.343,0.291 C 0.347,0.288 0.347,0.283 0.347,0.278 L 0.348,0.26 L 0.349,0.246 C 0.349,0.242 0.347,0.234 0.343,0.231 C 0.339,0.228 0.336,0.225 0.333,0.22 C 0.331,0.216 0.327,0.215 0.323,0.216 C 0.315,0.219 0.317,0.226 0.309,0.231 L 0.304,0.241 C 0.299,0.244 0.292,0.245 0.286,0.246 L 0.28,0.252 C 0.277,0.257 0.282,0.262 0.286,0.265 L 0.304,0.276 L 0.32,0.288 L 0.32,0.288";
+const BAT_H=4.2, BAT_W=0.3933, BAT_RIGHT=-0.95;
+function batterSVG(rightHanded){
+  const tx = BAT_RIGHT - BAT_W*BAT_H, ty = GROUND - BAT_H;
+  const fig = `<g transform="translate(${tx.toFixed(3)},${ty.toFixed(3)}) scale(${BAT_H})">
+      <path d="${BATTER_D}" fill="var(--ink)"/></g>`;
+  return `<g opacity=".26">${rightHanded ? fig : `<g transform="scale(-1,1)">${fig}</g>`}</g>`;
+}
+function plateSVG(){
+  // 421.79 x 78.59 in the source art; shoulders 43% of the way down, point centred
+  const PW=1.62, PD=PW*0.1863, y0=4.95-PD, sh=y0+PD*0.430, h=PW/2;
+  return `<rect x="${XMIN}" y="${GROUND+0.02}" width="${WIDE}" height="${(YTOP-GROUND-0.02).toFixed(2)}"
+            fill="rgba(154,90,60,.30)"/>
+    <path d="M${-h} ${y0.toFixed(3)}H${h}V${sh.toFixed(3)}L0 4.95L${-h} ${sh.toFixed(3)}Z"
+      fill="var(--plate)" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"
+      vector-effect="non-scaling-stroke"/>`;
+}
+
+/* ── state ────────────────────────────────────────────────────
+   The day's card is a list of at-bats, each from a different game.
+   EDGE is per at-bat: it resets when a new hitter steps in, so the
+   scouting budget is spent inside one plate appearance or lost. */
+let PACK=null, S=null;
+const PRICE={mix:2, hot:3, cnt:3, vp:3};
+const START_EDGE=10, MULT_CAP=8, IN_ZONE_BONUS=2, MAX_OUTS=3;
+
+function newGame(){
+  const q=[];
+  PACK.abs.forEach((a,ai)=>a.p.forEach((_,pi)=>q.push([ai,pi])));
+  S={q, i:0, runs:0, edge:START_EDGE, mult:1, strikes:0, outs:0,
+     pickType:null, pickZone:null, revealed:null, unlocked:{}, log:[], over:false};
+}
+const AT =()=>S.q[S.i];
+const AB =()=>PACK.abs[AT()[0]];
+const PI =()=>AT()[1];
+const P  =()=>AB().p[PI()];
+
+const key = k => `${AT()[0]}:${k}`;         // intel is scoped to the at-bat
+const has = k => !!S.unlocked[key(k)];
+function buy(k){
+  if(has(k) || S.edge < PRICE[k] || S.revealed) return;
+  S.edge -= PRICE[k]; S.unlocked[key(k)] = true; render();
+}
+function mixNow(){                           // his mix in that game, up to this pitch
+  const m = Object.assign({}, AB().mix);
+  for(let i=0;i<PI();i++){ const t=AB().p[i][2]; m[t]=(m[t]||0)+1; }
+  return m;
+}
+
+/* ── zone ─────────────────────────────────────────────────────── */
+function buildZone(){
+  const z=document.getElementById('zone'), p=P(), szT=p[6], szB=p[7];
+  const regs=regions(szT,szB);
+  const ab=AB();
+  const heat = has('hot') && ab.z ? Object.fromEntries(ab.z.split('|').map((v,i)=>[ZK[i],v])) : null;
+  const zx=-HALF, zw=HALF*2, zy=Y(szT), zh=szT-szB;
+  let g='';
+
+  if(heat){
+    for(const r of regs){
+      const v=heat[r.id]; if(!v) continue;
+      g += `<path d="${r.d}" fill="${TEMP[v[0]]}" opacity="${r.out?'.15':'.6'}"/>`;
+    }
+    for(const r of regs) if(!r.out && heat[r.id])
+      g += `<text class="hv" x="${r.cx}" y="${r.cy}">${heat[r.id].slice(1)}</text>`;
+    const corner={'11':[XMIN+.28,.24],'12':[XMAX-.28,.24],'13':[XMIN+.28,YTOP-.34],'14':[XMAX-.28,YTOP-.34]};
+    for(const id of ['11','12','13','14']) if(heat[id])
+      g += `<text class="hv q" x="${corner[id][0]}" y="${corner[id][1]}">${heat[id].slice(1)}</text>`;
+  }
+
+  g += batterSVG(ab.bt[2]==='R');
+  g += `<path class="szline" d="M${zx+zw/3} ${zy}V${zy+zh}M${zx+2*zw/3} ${zy}V${zy+zh}`
+     + `M${zx} ${zy+zh/3}H${zx+zw}M${zx} ${zy+2*zh/3}H${zx+zw}"/>`;
+  g += `<rect class="szbox" x="${zx}" y="${zy}" width="${zw}" height="${zh}"/>`;
+  g += plateSVG();
+
+  ab.p.slice(0, PI()).forEach((q2,i)=>{ g += marker(q2, i+1, .16, .42, false); });
+  if(S.revealed) g += marker(S.revealed, PI()+1, .21, 1, true);
+
+  // Hover and selection are drawn, never hit-tested: one transparent rect
+  // takes the pointer and the click resolves through zoneOf — the same
+  // function that grades the answer — so the two cannot drift apart.
+  const shape=Object.fromEntries(regs.map(r=>[r.id,r]));
+  const draw=(cls,id)=> id&&shape[id] ? `<path class="${cls}" d="${shape[id].d}"/>` : '';
+  g += `<path class="hov" id="hovpath" d=""/>` + draw('pick', S.pickZone);
+  g += `<rect class="capture" x="${XMIN}" y="0" width="${WIDE}" height="${YTOP}"/>`;
+
+  z.innerHTML = `<svg viewBox="${XMIN} 0 ${WIDE} ${YTOP}" tabindex="0" role="application"
+        aria-label="Strike zone. Click to place your call, or use the arrow keys.">${g}</svg>`
+    + (S.revealed && S.revealed[5] < 0.15
+        ? `<div class="dirtnote lbl">In the dirt &mdash; ${S.revealed[5].toFixed(2)} ft</div>` : '');
+  z.classList.toggle('locked', !!S.revealed);
+
+  const svg=z.querySelector('svg'), hov=z.querySelector('#hovpath');
+  const at = ev => {
+    const m=svg.getScreenCTM(); if(!m) return null;
+    const pt=svg.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY;
+    const u=pt.matrixTransform(m.inverse());
+    return zoneOf(u.x, YTOP-u.y, szT, szB);
+  };
+  if(!S.revealed){
+    svg.addEventListener('pointermove', e=>{
+      const id=at(e); hov.setAttribute('d', id&&shape[id] ? shape[id].d : '');
+    });
+    svg.addEventListener('pointerleave', ()=>hov.setAttribute('d',''));
+    svg.addEventListener('click', e=>{ const id=at(e); if(id){ S.pickZone=id; render(); } });
+    const ORDER=['11','01','02','03','12','04','05','06','07','08','09','13','14'];
+    svg.addEventListener('keydown', e=>{
+      const i=ORDER.indexOf(S.pickZone);
+      if(e.key==='ArrowRight'||e.key==='ArrowDown') S.pickZone=ORDER[(i+1)%ORDER.length]||ORDER[0];
+      else if(e.key==='ArrowLeft'||e.key==='ArrowUp') S.pickZone=ORDER[(i<=0?ORDER.length:i)-1];
+      else return;
+      e.preventDefault(); render(); requestAnimationFrame(()=>document.querySelector('#zone svg').focus());
+    });
+  }
+
+  function marker(q2,n,r,op,now){
+    const x=Math.max(XMIN+r, Math.min(XMAX-r, q2[4])), y=Math.max(r, Math.min(YTOP-r, Y(q2[5])));
+    const col=pc(q2[2]);
+    return `<g class="pm${now?' now':''}" opacity="${op}">
+      <circle cx="${x}" cy="${y}" r="${r}" fill="${col}"/>
+      <text x="${x}" y="${y}" fill="${ink(col)}">${n}</text></g>`;
+  }
+}
+
+/* ── scouting rack ────────────────────────────────────────────── */
+function buildRack(){
+  const ab=AB(), shut=!!S.revealed;
+  const panel=(k,title,body)=>{
+    const open=has(k), afford=S.edge>=PRICE[k];
+    return `<section class="rk"><h3>${title}${open?'':
+      `<button class="buy" data-buy="${k}" ${(!afford||shut)?'disabled':''}>${PRICE[k]} EDGE</button>`}</h3>
+      ${open?`<div class="in">${body()}</div>`
+            :`<div class="shut">${shut?'The pitch is in. Too late.'
+              :afford?`${PRICE[k]} EDGE to open.`:`You need ${PRICE[k]-S.edge} more EDGE.`}</div>`}</section>`;
+  };
+  const chip=c=>`<i style="background:${pc(c)}"></i>`;
+
+  const mixBody=()=>{
+    const m=mixNow(), tot=Object.values(m).reduce((a,b)=>a+b,0);
+    if(!tot) return `<span class="shut" style="padding:0">First batter he faced that day &mdash; nothing thrown yet.</span>`;
+    return `<div class="mix">`+Object.entries(m).sort((a,b)=>b[1]-a[1]).map(([c,n])=>
+      `<div class="mixrow">${chip(c)}<span>${c}</span>
+        <span class="bar"><b style="width:${(n/tot*100).toFixed(1)}%"></b></span>
+        <span style="text-align:right">${(n/tot*100).toFixed(0)}%</span></div>`).join('')
+      + `</div><div class="foot">${tot} pitches earlier that game</div>`;
+  };
+  const cntBody=()=>{
+    const k=`${P()[0]}-${P()[1]}`, row=PACK.counts&&PACK.counts[k];
+    if(!row) return `<span class="shut" style="padding:0">No book on this count.</span>`;
+    return `<div class="mix">`+row[1].map(([c,pctv])=>
+      `<div class="mixrow">${chip(c)}<span>${c}</span>
+        <span class="bar"><b style="width:${pctv}%"></b></span>
+        <span style="text-align:right">${pctv}%</span></div>`).join('')
+      + `</div><div class="foot">${k} counts &middot; ${row[0]} pitches on file</div>`;
+  };
+  const hotBody=()=>`<span style="font-size:12.5px;color:var(--ink-2)">Batting average by zone that season,
+      painted on the strike zone. Red is where he does damage.</span>`;
+  const vpBody=()=>{
+    const rate=s=>String(s).replace(/^0\./,'.');
+    if(ab.vp && ab.vp.length){
+      const rows=Object.fromEntries(ab.vp.map(v=>[v[0],v]));
+      const body=Object.keys(ab.arsenal).map(t=>{
+        const v=rows[t];
+        if(!v) return `<tr><td>${chip(t)}${t}</td><td colspan="3" class="none">no split</td></tr>`;
+        return `<tr title="${v[1]} PA"><td>${chip(t)}${t}</td>
+          <td>${rate(v[3])}</td><td>${rate(v[4])}</td><td>${v[5]}%</td></tr>`;
+      }).join('');
+      const pas=ab.vp.map(v=>v[1]);
+      return `<table class="tbl"><thead><tr><th>Pitch</th><th>SLG</th><th>wOBA</th><th>Whiff</th></tr></thead>
+        <tbody>${body}</tbody></table>
+        <div class="foot">${Math.min(...pas)}&ndash;${Math.max(...pas)} PA per pitch, ${ab.season}</div>`;
+    }
+    if(ab.sl){
+      const s=ab.sl;
+      return `<table class="tbl"><thead><tr><th>Line</th><th>AVG</th><th>OBP</th><th>SLG</th></tr></thead>
+        <tbody><tr><td>${ab.season}</td><td>${s[0]}</td><td>${s[1]}</td><td>${s[2]}</td></tr></tbody></table>
+        <div class="foot">${s[4]} HR &middot; ${s[6]} BB &middot; ${s[5]} K in ${s[7]} PA</div>
+        <div class="foot" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--ink-2)">
+          Pitch-type splits only exist from 2017 on, so this is his season line instead.</div>`;
+    }
+    return `<span class="shut" style="padding:0">Nothing on file for ${ab.season}.</span>`;
+  };
+
+  document.getElementById('rack').innerHTML =
+      `<div class="lbl" style="margin:2px 0 -2px 2px">Scouting &mdash; ${S.edge} EDGE this at-bat</div>`
+    + panel('cnt','In this count', cntBody)
+    + panel('hot','Hot &amp; cold zones', hotBody)
+    + panel('mix','His mix that game', mixBody)
+    + panel('vp', (ab.vp && ab.vp.length) ? 'Batter vs pitch type' : `Batter, ${ab.season}`, vpBody);
+  document.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buy(b.dataset.buy));
+}
+
+/* ── render ───────────────────────────────────────────────────── */
+const ORD = n => n+(['th','st','nd','rd'][n%10>3||(n%100>10&&n%100<14)?0:n%10]||'th');
+const ONBASE = {Empty:'bases empty', Men_On:'runner on', RISP:'runner in scoring position', Loaded:'bases loaded'};
+
+function render(){
+  if(S.over) return;
+  const ab=AB(), p=P();
+  document.getElementById('s-runs').textContent=S.runs;
+  document.getElementById('s-edge').textContent=S.edge;
+  const mEl=document.getElementById('s-mult');
+  mEl.innerHTML=S.mult.toFixed(1)+'&times;';
+  mEl.style.color = S.mult>=MULT_CAP ? 'var(--red)' : '';
+  document.getElementById('s-strikes').innerHTML=[0,1,2].map(i=>`<i class="${i<S.strikes?'on':''}"></i>`).join('');
+  document.getElementById('s-outs').innerHTML=[0,1,2].map(i=>`<i class="o ${i<S.outs?'on':''}"></i>`).join('');
+
+  document.getElementById('z-match').innerHTML =
+    `${ab.bt[1]} <span style="color:var(--mute);font-size:15px">(${ab.bt[2]}HH)</span>`;
+  document.getElementById('z-where').textContent =
+    `${PACK.pitcher.name} · ${ab.away} at ${ab.home} · ${ab.venue} · ${ab.date} · `
+    + `${ab.top?'top':'bot'} ${ORD(ab.inning)}, ${ab.o} out${ab.o===1?'':'s'}, ${ONBASE[ab.on]||ab.on}`;
+  document.getElementById('z-count').innerHTML=`${p[0]}&ndash;${p[1]}`;
+
+  document.getElementById('arsenal').innerHTML=Object.entries(ab.arsenal).map(([c,full])=>
+    `<button class="pbtn" data-t="${c}" aria-pressed="${S.pickType===c}" ${S.revealed?'disabled':''}>
+       <i class="dot" style="background:${pc(c)}"></i>
+       <span><span class="code">${c}</span><span class="full">${full}</span></span></button>`).join('');
+  document.querySelectorAll('.pbtn').forEach(b=>b.onclick=()=>{S.pickType=b.dataset.t;render();});
+
+  buildZone(); buildRack();
+
+  const btn=document.getElementById('btn-call'), hint=document.getElementById('hint');
+  if(S.revealed){
+    btn.textContent = isLast() ? (S.outs>=MAX_OUTS?'Three outs':'Finish') : 'Next pitch';
+    btn.className='call ghost'; btn.disabled=false; btn.onclick=advance; hint.textContent='';
+  }else{
+    btn.textContent='Call it'; btn.className='call';
+    btn.disabled=!(S.pickType&&S.pickZone); btn.onclick=submit;
+    hint.textContent = !S.pickType ? 'Pick a pitch type, then click a spot on the zone.'
+      : !S.pickZone ? 'Now the spot. The nine squares inside the zone pay a bonus.'
+      : 'Lock it in.';
+  }
+  document.getElementById('verdict').innerHTML = S.revealed ? verdictHTML() : '';
+}
+
+const isLast = () => S.outs>=MAX_OUTS || S.i===S.q.length-1;
+
+function verdictHTML(){
+  const v=S.lastResult, col=pc(v.type), left=MAX_OUTS-S.outs;
+  return `<div class="verdict">
+    <div class="vtop">
+      <span class="vbig ${v.runs?'good':'bad'}">${v.runs?'+'+v.runs:v.rang?'OUT':'STRIKE'}</span>
+      <span class="chip ${v.tOK?'ok':'no'}">Type ${v.tOK?'✓':'✗'} ${v.type}</span>
+      <span class="chip ${v.zOK?'ok':'no'}">Zone ${v.zOK?'✓':'✗'} ${v.zone}</span>
+      ${v.runs?`<span class="chip">${v.base} × ${v.multUsed.toFixed(1)}</span>`:''}
+      ${v.bonus?`<span class="chip bonus">In-zone +${IN_ZONE_BONUS} mult</span>`:''}
+      ${v.edge?`<span class="chip ok">+${v.edge} EDGE</span>`:''}
+      ${v.rang?`<span class="chip no">${left} out${left===1?'':'s'} left</span>`:''}
+    </div>
+    <div class="vline"><i class="dot" style="background:${col};margin:0"></i>
+      <b>${v.full} ${v.velo} mph</b> &mdash; ${v.desc}</div>
+    ${v.res?`<div class="vres"><b>${v.res[0]}</b>
+      <div style="color:var(--ink-2);margin-top:3px">${v.res[1]}</div></div>`:''}
+  </div>`;
+}
+
+function submit(){
+  const p=P(), ab=AB();
+  const zone=zoneOf(p[4],p[5],p[6],p[7]);
+  const tOK=S.pickType===p[2], zOK=S.pickZone===zone;
+  const base = tOK&&zOK ? 3 : (tOK||zOK) ? 1 : 0;
+  const multUsed=S.mult;
+  const runs = base ? Math.round(base*multUsed) : 0;
+  const edge = tOK&&zOK ? 3 : base ? 1 : 0;
+  // Calling one of the nine squares inside the zone is far harder than one of
+  // the four big areas outside it, so it pays a flat multiplier bonus.
+  const bonus = zOK && inZone(zone) ? IN_ZONE_BONUS : 0;
+
+  S.runs+=runs; S.edge+=edge;
+  let rang=false;
+  if(base) S.mult=Math.min(MULT_CAP, Math.round((S.mult*1.5+bonus)*100)/100);
+  else { S.strikes++; S.mult=1; if(S.strikes>=3){ S.strikes=0; S.outs++; rang=true; } }
+  S.log.push(tOK&&zOK?'B':base?'H':'X');
+  S.lastResult={runs, base, multUsed, edge, bonus, rang, tOK, zOK, zone,
+    type:p[2], full:ab.arsenal[p[2]], velo:p[3], desc:p[9],
+    res: PI()===ab.p.length-1 ? ab.res : null};
+  S.revealed=p;
+  render();
+}
+
+function advance(){
+  if(isLast()){ S.over=true; showFinal(); return; }
+  const fromAB=AT()[0];
+  S.revealed=null; S.pickType=null; S.pickZone=null;
+  S.i++;
+  if(AT()[0]!==fromAB){ S.edge=START_EDGE; showStepIn(); return; }  // new hitter, fresh budget
+  render();
+}
+
+/* ── screens ──────────────────────────────────────────────────── */
+const modal=document.getElementById('modal');
+const closeModal=()=>{modal.innerHTML='';};
+
+function showIntro(){
+  const P0=PACK.pitcher, span=`${P0.car.from}–${P0.car.to}`;
+  modal.innerHTML=`<div class="veil"><div class="modal">
+    <p class="kick">${PACK.date} &middot; today&rsquo;s arm</p>
+    <h1>Next <em>Pitch</em></h1>
+    <p>Today it is <b>${P0.name}</b>, ${P0.hand}HP, ${span}. Every at-bat on the card is a real
+    plate appearance from somewhere in his career &mdash; different year, different ballpark,
+    different hitter. Before each pitch, call the <b>type</b> and the <b>spot</b>.</p>
+    <h2>Scoring</h2>
+    <ul class="rules">
+      <li><b>1 run</b><span>Right type, wrong spot &mdash; or the reverse.</span></li>
+      <li><b>3 runs</b><span>Both right.</span></li>
+      <li><b>&times;1.5</b><span>Every scoring call multiplies the next one.</span></li>
+      <li><b>+2 mult</b><span>Bonus for calling one of the nine squares inside the zone rather than
+        one of the four big areas outside it. Tops out at &times;${MULT_CAP}.</span></li>
+      <li><b>Strike</b><span>Miss both. Three strikes is an out; three outs ends the day.</span></li>
+    </ul>
+    <h2>Edge</h2>
+    <p>Each at-bat starts with <b>${START_EDGE} EDGE</b>, and you earn more by being right &mdash; 1 for a
+    partial call, 3 for both. Spend it on the scouting rack: what he throws in this count, the
+    hitter&rsquo;s hot and cold zones, his pitch mix earlier that game, how this hitter handles each
+    pitch. <b>Unspent EDGE does not carry</b> &mdash; a new hitter means a new budget, so use it.</p>
+    <div class="callrow" style="max-width:none"><button class="call" id="go">Play ball</button></div>
+    <p class="note">Every pitch, location and split is real, from MLB&rsquo;s public data. Zones follow
+    MLB&rsquo;s 13-region scheme in the catcher&rsquo;s view, so a right-handed hitter stands on the left.</p>
+  </div></div>`;
+  document.getElementById('go').onclick=()=>{closeModal();render();};
+}
+
+function showStepIn(){
+  const ab=AB();
+  modal.innerHTML=`<div class="veil"><div class="modal">
+    <p class="kick">${ab.date} &middot; ${ab.venue}</p>
+    <h1>${ab.bt[1]}</h1>
+    <p>${ab.bt[2]==='R'?'Right':'Left'}-handed, batting for the ${ab.top?ab.awayName:ab.homeName} in the
+    ${ab.top?'top':'bottom'} of the ${ORD(ab.inning)} &mdash; ${ab.o} out${ab.o===1?'':'s'},
+    ${ONBASE[ab.on]||ab.on}. ${ab.season} ${PACK.pitcher.name} on the mound.</p>
+    <div class="tiles">
+      <div><span class="lbl">Runs</span><b>${S.runs}</b></div>
+      <div><span class="lbl">Edge</span><b>${START_EDGE}</b></div>
+      <div><span class="lbl">Outs</span><b>${S.outs}<span style="font-size:15px;color:var(--mute)"> / ${MAX_OUTS}</span></b></div>
+    </div>
+    <p class="note">Fresh EDGE for this hitter. Whatever you had left is gone.</p>
+    <div class="callrow" style="max-width:none"><button class="call" id="go">Step in</button></div>
+  </div></div>`;
+  document.getElementById('go').onclick=()=>{closeModal();render();};
+}
+
+function showFinal(){
+  const grid=S.log.map(c=>c==='B'?'\u{1F7E9}':c==='H'?'\u{1F7E8}':'⬛').join('');
+  const both=S.log.filter(c=>c==='B').length, part=S.log.filter(c=>c==='H').length;
+  const seen=new Set(S.q.slice(0,S.i+1).map(x=>x[0])).size;
+  modal.innerHTML=`<div class="veil"><div class="modal">
+    <p class="kick">Final &middot; ${PACK.date} &middot; ${PACK.pitcher.name}</p>
+    <h1>${S.runs} run${S.runs===1?'':'s'}</h1>
+    <p>${S.outs>=MAX_OUTS ? `Three outs after ${seen} hitter${seen===1?'':'s'}.`
+       : 'You called every pitch on the card.'}</p>
+    <div class="tiles">
+      <div><span class="lbl">Called both</span><b>${both}</b></div>
+      <div><span class="lbl">Called one</span><b>${part}</b></div>
+      <div><span class="lbl">Pitches</span><b>${S.log.length}</b></div>
+    </div>
+    <p class="grid-out">${grid}</p>
+    <div class="callrow" style="max-width:none;margin-top:20px">
+      <button class="call" id="share">Copy result</button>
+      <button class="call ghost" id="again">Play again</button>
+    </div>
+    <p class="note">Data: MLB Stats API and Baseball Savant. Not affiliated with MLB.</p>
+  </div></div>`;
+  document.getElementById('again').onclick=()=>{newGame();closeModal();render();};
+  document.getElementById('share').onclick=()=>{
+    const txt=`Next Pitch — ${PACK.date}\n${PACK.pitcher.name}\n${S.runs} runs · ${both} perfect calls · ${S.log.length} pitches\n${grid}`;
+    (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(toast,toast);
+  };
+}
+function toast(){
+  const t=document.createElement('div'); t.className='toast'; t.textContent='Result copied';
+  document.body.appendChild(t); setTimeout(()=>t.remove(),1800);
+}
+
+/* ── boot ─────────────────────────────────────────────────────
+   A bundled build inlines the pack as window.__PACK. Served from a
+   web root it fetches today's card instead, falling back to the most
+   recent one so the game is never empty. */
+async function boot(){
+  try{
+    if(window.__PACK){ PACK=window.__PACK; }
+    else{
+      const idx=await (await fetch('data/packs/index.json')).json();
+      const today=new Date().toISOString().slice(0,10);
+      const pick=idx.packs.includes(today) ? today : idx.latest;
+      PACK=await (await fetch(`data/packs/${pick}.json`)).json();
+    }
+    document.getElementById('loading').hidden=true;
+    document.getElementById('board').hidden=false;
+    newGame(); render(); showIntro();
+  }catch(e){
+    document.getElementById('loading').innerHTML =
+      `Could not load today&rsquo;s card.<br><span style="font-size:13px">${e.message}</span><br>
+       <span style="font-size:13px">If you opened this file directly, use the bundled build in
+       <code>dist/</code> or serve the folder over http.</span>`;
+  }
+}
+boot();
+</script>
+</body>
+</html>
