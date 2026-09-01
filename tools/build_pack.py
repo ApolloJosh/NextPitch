@@ -27,8 +27,10 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
 SEASONS = list(range(2015, 2027))          # the Statcast era
 MIN_PITCHES = 5                            # an at-bat has to be a real duel
 MIN_ARSENAL = 3                            # and offer a real choice
-GAMES_SAMPLED = 12
 AT_BATS = 18
+# A starter faces 25 hitters a night, a closer four. Sample relievers far
+# wider or there aren't 18 long at-bats to be had.
+GAMES_SAMPLED = {"SP": 12, "CL": 45}
 
 # Not pitches anyone could call: intentional balls, pitchouts, automatic and
 # unknown. MLB codes the sweeper ST; the game shows SW.
@@ -54,14 +56,15 @@ def get(url, timeout=60, retries=3):
 def get_json(url, **kw):
     return json.loads(get(url, **kw))
 
-def get_starts(pid):
-    """Every game this pitcher started, across the Statcast era."""
+def get_outings(pid, starts_only):
+    """Every game this pitcher appeared in across the Statcast era — starts
+    only for a starter, every appearance for a reliever."""
     out = []
     for y in SEASONS:
         d = get_json(f"{API}/api/v1/people/{pid}/stats"
                      f"?stats=gameLog&group=pitching&season={y}")
         for s in (d.get("stats") or [{}])[0].get("splits", []):
-            if s["stat"].get("gamesStarted"):
+            if s["stat"].get("gamesStarted") or not starts_only:
                 out.append({"y": y, "pk": s["game"]["gamePk"], "date": s["date"]})
         time.sleep(0.2)
     return out
@@ -247,11 +250,13 @@ def main():
         raise SystemExit(f"{args.pitcher} is not in the pool")
     print(f"{args.date}: {who['name']} ({who['role']}, {who['hand']}HP)")
 
-    starts = get_starts(who["id"])
-    if len(starts) < 4:
-        raise SystemExit(f"{who['name']} has too few starts on file ({len(starts)})")
-    picks = spread_games(starts, GAMES_SAMPLED, args.date)
-    print(f"  {len(starts)} starts on file; sampling {len(picks)}")
+    starts_only = who["role"] == "SP"
+    outings = get_outings(who["id"], starts_only)
+    if len(outings) < 4:
+        raise SystemExit(f"{who['name']} has too few outings on file ({len(outings)})")
+    picks = spread_games(outings, GAMES_SAMPLED.get(who["role"], 12), args.date)
+    print(f"  {len(outings)} {'starts' if starts_only else 'appearances'} on file; "
+          f"sampling {len(picks)}")
 
     found = []
     for g in picks:
@@ -262,7 +267,10 @@ def main():
         time.sleep(0.4)
     print(f"  {len(found)} at-bats of {MIN_PITCHES}+ pitches")
     if len(found) < AT_BATS:
-        raise SystemExit("not enough usable at-bats; raise GAMES_SAMPLED")
+        raise SystemExit(
+            f"only {len(found)} usable at-bats. Either raise GAMES_SAMPLED, or this arm "
+            f"throws fewer than {MIN_ARSENAL} pitches and can't carry a card — see "
+            f"'Arms that can't carry a card' in the README.")
 
     counts, n_counts = count_table(found)
     card = spread_at_bats(found, AT_BATS)
@@ -291,12 +299,22 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(pack, separators=(",", ":"), ensure_ascii=False))
 
+    # The index carries enough about each arm for the home screen to name it
+    # and print his peak line without downloading every card.
     idx_path = ROOT / "data/packs/index.json"
     idx = json.loads(idx_path.read_text()) if idx_path.exists() else {"packs": []}
-    if args.date not in idx["packs"]:
-        idx["packs"].append(args.date)
-    idx["packs"].sort()
-    idx["latest"] = idx["packs"][-1]
+    entries = [e for e in idx.get("packs", []) if isinstance(e, dict)]
+    entries = [e for e in entries if e["date"] != args.date]
+    entries.append({
+        "date": args.date,
+        "id":   pack["pitcher"]["id"],
+        "name": pack["pitcher"]["name"],
+        "hand": pack["pitcher"]["hand"],
+        "peak": pack["pitcher"]["peak"],
+        "car":  pack["pitcher"]["car"],
+    })
+    entries.sort(key=lambda e: e["date"])
+    idx = {"latest": entries[-1]["date"], "packs": entries}
     idx_path.write_text(json.dumps(idx, indent=2))
 
     print(f"  wrote {out}  ({out.stat().st_size:,} bytes)")

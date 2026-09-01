@@ -35,6 +35,14 @@ hitter stands on the left of the graphic.
 
 ---
 
+## The home screen
+
+The landing page names the day's arm with his peak line and a **Face today's
+pitcher** button, and lists every earlier card underneath. `#YYYY-MM-DD` on the
+URL drops you straight into that day.
+
+---
+
 ## Running it
 
 ```
@@ -61,10 +69,11 @@ python3 tools/build_pack.py --date 2026-09-02 --pitcher 543037    # force a pitc
 ```
 
 The pitcher is chosen deterministically from the date, so everyone gets the same
-arm on the same day. The builder then samples twelve starts spread across his
-career, keeps every plate appearance of five or more pitches, and deals eighteen
-of them round-robin by season so the card jumps around rather than sitting in
-one year.
+arm on the same day. The builder then samples outings spread across his career —
+twelve starts for a starter, forty-five appearances for a reliever, who faces
+four hitters a night instead of twenty-five — keeps every plate appearance of
+five or more pitches, and deals eighteen of them round-robin by season so the
+card jumps around rather than sitting in one year.
 
 **Run this where the network is open.** Both `statsapi.mlb.com` and
 `baseballsavant.mlb.com` are refused by the egress proxy inside sandboxed
@@ -119,6 +128,22 @@ tools/build_pack.py        builds a card from MLB's API
 tools/bundle.py            inlines artwork + card into one file
 dist/                      bundled builds
 ```
+
+---
+
+## Arms that can't carry a card
+
+A card needs at least three pitch types on offer (`MIN_ARSENAL`), or calling the
+pitch is a coin flip. That rules out the two-pitch closers in the pool —
+**Edwin Díaz** and **Craig Kimbrel** are fastball-and-one, and the builder exits
+rather than deal a card nobody can play. The daily pick doesn't know this yet:
+it hashes the date against all thirty names, so some dates land on an arm that
+can't be built and need a `--pitcher` override.
+
+Two ways to close it, neither done: drop `MIN_ARSENAL` to 2 for relievers and
+accept the coin flip, or record each pitcher's arsenal size in
+`data/pitchers.json` and have the daily pick skip the ones that fall short. The
+second is the better answer.
 
 ---
 
