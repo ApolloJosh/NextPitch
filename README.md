@@ -11,27 +11,53 @@ and pitch-type split in the game is real.
 
 ## How it plays
 
-| | |
-|---|---|
-| **1 run** | Right pitch type, wrong spot — or the reverse |
-| **3 runs** | Both right |
-| **×1.5** | Every scoring call multiplies the next one |
-| **+2 mult** | Bonus for calling one of the nine squares *inside* the zone rather than one of the four big areas outside it. Caps at ×8 |
-| **Strike** | Miss both. The multiplier resets to ×1 |
-| **Out** | Three strikes. Three outs ends the day |
+You call two things before every pitch: the **type**, and the **spot**. The spot
+isn't a box — it's a point. Click anywhere in the frame, and when the pitch lands,
+rings go up around where it actually crossed.
 
-Each at-bat starts with **10 EDGE**, and you earn more by being right — 1 for a
-partial call, 3 for both. Spend it on the scouting rack:
+| Distance from the pitch | | Points | Multiplier |
+|---|---|---|---|
+| within 3″ | **Bullseye** | 4, then **doubled** | ×2 |
+| within 6″ | Inside it | 2 | ×1.5 |
+| within 10″ | Caught the edge | 1 | ×1.15 |
+| beyond | missed the spot | 0 | — |
+
+Plus **+2** for the right pitch type, and **+2** more for getting type and spot
+together. A bullseye doubles the whole pitch. Miss on both and the multiplier
+resets to ×1 and you take a **miss**; three misses is an out, three outs ends the
+day.
+
+The multiplier grows by *how close* you were, not merely that you scored. That
+matters: pitches cluster over the middle, so a flat multiplier made clicking the
+centre of the zone every time the strongest strategy — a lazy call kept a streak
+alive as well as a read one. Graded growth pays the read.
+
+Simulated over a real card, 61 runs each:
+
+| | Points | Pitches survived | Bullseyes |
+|---|---|---|---|
+| Clicking at random | 7 | 13 | 0 |
+| His best pitch, middle of the zone | 123 | 31 | 0 |
+| Working the count table | 119 | 31 | 1 |
+| Reading him well | 158 | 32 | 2 |
+
+Lazy play and half-attentive play land in the same place, which is the point:
+the count table alone doesn't beat the middle of the zone, because pitches
+cluster there anyway. What separates them is precision — and precision is what
+the bullseye pays.
+
+You start the day with **10 EDGE** and earn more by being right — 1 for a partial
+call, 2 for both, 3 for a bullseye. Spend it on the scouting rack:
 
 - **In this count** — what this pitcher goes to on 1-2, on 3-0, and so on
 - **Hot & cold zones** — the hitter's batting average by zone, that season, painted on the strike zone
 - **His mix that game** — what he'd thrown earlier in the game this at-bat came from
 - **Batter vs pitch type** — SLG, wOBA and whiff rate against each pitch in the arsenal
 
-**Unspent EDGE does not carry.** A new hitter means a new budget.
+**It is one budget for the whole day.** Nothing refills between hitters, so what
+you spend scouting the first man isn't there for the ninth.
 
-Zones follow MLB's 13-region scheme in the catcher's view, so a right-handed
-hitter stands on the left of the graphic.
+The view is the catcher's, so a right-handed hitter stands on the left.
 
 ---
 
@@ -70,10 +96,21 @@ python3 tools/build_pack.py --date 2026-09-02 --pitcher 543037    # force a pitc
 
 The pitcher is chosen deterministically from the date, so everyone gets the same
 arm on the same day. The builder then samples outings spread across his career —
-twelve starts for a starter, forty-five appearances for a reliever, who faces
-four hitters a night instead of twenty-five — keeps every plate appearance of
-five or more pitches, and deals eighteen of them round-robin by season so the
-card jumps around rather than sitting in one year.
+fourteen starts for a starter, fifty appearances for a reliever, who faces four
+hitters a night instead of twenty-five — and deals eighteen plate appearances
+round-robin by season so the card jumps around rather than sitting in one year.
+
+Three filters decide what's usable:
+
+- **Five pitches or more.** An at-bat has to be a real duel.
+- **Never the first inning.** "His mix that game" is worth nothing before he's
+  thrown anything, so the card starts in the second.
+- **2017 and later.** Savant's batter pitch-type splits begin there.
+- **A hitter with a real book.** At least 150 plate appearances on file that
+  season, covering at least two pitches in the arsenal, and a hot/cold grid that
+  isn't placeholders. Without this the card fills up with September call-ups,
+  2020 part-timers and pitchers batting, whose scouting panels read ".000 on 4
+  PA" — worse than no panel, because it looks like information.
 
 **Run this where the network is open.** Both `statsapi.mlb.com` and
 `baseballsavant.mlb.com` are refused by the egress proxy inside sandboxed
@@ -149,14 +186,17 @@ second is the better answer.
 
 ## Known gaps
 
-- **Pitch-type splits only exist from 2017.** At-bats from 2015 and 2016 show
-  the hitter's season line instead, labelled as such.
+- **Nothing before 2017.** Savant's batter pitch-type splits start there, and a
+  card without them is missing a whole scouting panel. It costs the pool its
+  2015–16 seasons — Kershaw's 2015 and Arrieta's Cy Young year are out of reach.
 - **The count table is a small sample.** It's built from the same dozen games
   the card was drawn from — a few hundred pitches, not a career. It's a
   tendency, not a projection.
 - **No park factor** in the ERA+ used to build the pool.
 - **Hot/cold zone numbering** follows MLB's own scheme, catcher's view. Worth
   confirming against a Savant chart before anything goes to print.
+- **The ring radii are tuned against one card.** 3/6/10 inches came from
+  simulating deGrom's; a pitcher who lives on the corners may play differently.
 
 ---
 

@@ -2,6 +2,121 @@
   "latest": "2026-09-01",
   "packs": [
     {
+      "date": "2026-08-27",
+      "id": 605483,
+      "name": "Blake Snell",
+      "hand": "L",
+      "peak": {
+        "y": 2018,
+        "ip": 181,
+        "eraPlus": 220,
+        "w": 21,
+        "sv": 0,
+        "era": 1.89
+      },
+      "car": {
+        "ip": 747,
+        "w": 55,
+        "sv": 0,
+        "era": 3,
+        "seasons": 5,
+        "from": 2017,
+        "to": 2023
+      }
+    },
+    {
+      "date": "2026-08-28",
+      "id": 669373,
+      "name": "Tarik Skubal",
+      "hand": "L",
+      "peak": {
+        "y": 2025,
+        "ip": 195,
+        "eraPlus": 188,
+        "w": 13,
+        "sv": 0,
+        "era": 2.21
+      },
+      "car": {
+        "ip": 663,
+        "w": 47,
+        "sv": 0,
+        "era": 2.86,
+        "seasons": 4,
+        "from": 2021,
+        "to": 2026
+      }
+    },
+    {
+      "date": "2026-08-29",
+      "id": 453286,
+      "name": "Max Scherzer",
+      "hand": "R",
+      "peak": {
+        "y": 2018,
+        "ip": 221,
+        "eraPlus": 164,
+        "w": 18,
+        "sv": 0,
+        "era": 2.53
+      },
+      "car": {
+        "ip": 1528,
+        "w": 118,
+        "sv": 0,
+        "era": 2.77,
+        "seasons": 8,
+        "from": 2015,
+        "to": 2023
+      }
+    },
+    {
+      "date": "2026-08-30",
+      "id": 477132,
+      "name": "Clayton Kershaw",
+      "hand": "L",
+      "peak": {
+        "y": 2015,
+        "ip": 233,
+        "eraPlus": 186,
+        "w": 16,
+        "sv": 0,
+        "era": 2.13
+      },
+      "car": {
+        "ip": 1276,
+        "w": 106,
+        "sv": 0,
+        "era": 2.49,
+        "seasons": 8,
+        "from": 2015,
+        "to": 2023
+      }
+    },
+    {
+      "date": "2026-08-31",
+      "id": 543037,
+      "name": "Gerrit Cole",
+      "hand": "R",
+      "peak": {
+        "y": 2019,
+        "ip": 212,
+        "eraPlus": 180,
+        "w": 20,
+        "sv": 0,
+        "era": 2.5
+      },
+      "car": {
+        "ip": 1415,
+        "w": 110,
+        "sv": 0,
+        "era": 3.07,
+        "seasons": 7,
+        "from": 2015,
+        "to": 2023
+      }
+    },
+    {
       "date": "2026-09-01",
       "id": 594798,
       "name": "Jacob deGrom",
@@ -11,12 +126,15 @@
         "ip": 217,
         "eraPlus": 244,
         "w": 10,
+        "sv": 0,
         "era": 1.7
       },
       "car": {
         "ip": 1271,
         "w": 79,
+        "sv": 0,
         "era": 2.81,
+        "seasons": 7,
         "from": 2015,
         "to": 2026
       }

@@ -24,13 +24,16 @@ SAVANT = "https://baseballsavant.mlb.com"
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 
-SEASONS = list(range(2015, 2027))          # the Statcast era
+SEASONS = list(range(2017, 2027))          # Savant pitch splits start in 2017
 MIN_PITCHES = 5                            # an at-bat has to be a real duel
+MIN_INNING = 2                             # never the first inning: "his mix this game" needs a game
 MIN_ARSENAL = 3                            # and offer a real choice
+MIN_PA = 150                               # the hitter needs a season's track record,
+MIN_OVERLAP = 2                            # covering at least two pitches in the arsenal
 AT_BATS = 18
 # A starter faces 25 hitters a night, a closer four. Sample relievers far
 # wider or there aren't 18 long at-bats to be had.
-GAMES_SAMPLED = {"SP": 12, "CL": 45}
+GAMES_SAMPLED = {"SP": 14, "CL": 50}
 
 # Not pitches anyone could call: intentional balls, pitchouts, automatic and
 # unknown. MLB codes the sweeper ST; the game shows SW.
@@ -82,17 +85,6 @@ def get_hot_cold(pid, season):
     if not ba:
         return None
     return {z["zone"]: (z["temp"], z["value"]) for z in ba["stat"]["zones"]}
-
-def get_season_line(pid, season):
-    d = get_json(f"{API}/api/v1/people/{pid}/stats"
-                 f"?stats=season&group=hitting&season={season}")
-    sp = (d.get("stats") or [{}])[0].get("splits") or []
-    if not sp:
-        return None
-    s = sp[0]["stat"]
-    return [s.get("avg"), s.get("obp"), s.get("slg"), s.get("ops"),
-            s.get("homeRuns"), s.get("strikeOuts"), s.get("baseOnBalls"),
-            s.get("plateAppearances")]
 
 _ARSENAL = {}
 def get_vs_pitch(season):
@@ -156,9 +148,14 @@ def spread_at_bats(abs_, n):
     return out
 
 def at_bats_from_game(feed, pid, meta):
-    """Every 5+ pitch plate appearance this pitcher worked in this game."""
+    """Every 5+ pitch plate appearance this pitcher worked in this game, after
+    the first inning, against someone who isn't another pitcher."""
     gd, plays = feed["gameData"], feed["liveData"]["plays"]["allPlays"]
     mine = [p for p in plays if p["matchup"]["pitcher"]["id"] == pid]
+
+    def is_pitcher(bid):
+        pl = (gd.get("players") or {}).get(f"ID{bid}") or {}
+        return (pl.get("primaryPosition") or {}).get("code") == "1"
 
     arsenal = {}
     for p in mine:
@@ -174,7 +171,9 @@ def at_bats_from_game(feed, pid, meta):
     for p in mine:
         evs = [e for e in p.get("playEvents", []) if is_pitch(e)
                and code(e["details"]["type"]["code"]) not in JUNK]
-        if len(evs) >= MIN_PITCHES:
+        if len(evs) >= MIN_PITCHES \
+           and p["about"]["inning"] >= MIN_INNING \
+           and not is_pitcher(p["matchup"]["batter"]["id"]):
             pitches = []
             for i, e in enumerate(evs):
                 # `count` on a playEvent is the count AFTER the pitch, so the
@@ -272,22 +271,41 @@ def main():
             f"throws fewer than {MIN_ARSENAL} pitches and can't carry a card — see "
             f"'Arms that can't carry a card' in the README.")
 
-    counts, n_counts = count_table(found)
-    card = spread_at_bats(found, AT_BATS)
+    # A hitter with four plate appearances on file has no book worth buying: his
+    # splits read .000/.000 and his hot-cold grid comes back as placeholders.
+    # Savant's leaderboard is cached per season, so this filter costs nothing.
+    keep = []
+    for a in found:
+        vp = [v for v in get_vs_pitch(a["season"]).get(a["bt"][0], [])
+              if v[0] in a["arsenal"]]                      # only pitches he'd see here
+        pa = sum(v[1] for v in get_vs_pitch(a["season"]).get(a["bt"][0], []))
+        if pa >= MIN_PA and len(vp) >= MIN_OVERLAP:
+            a["_vp"] = vp
+            keep.append(a)
+    print(f"  {len(keep)} of those against a hitter with a real book")
+    if len(keep) < AT_BATS:
+        raise SystemExit(f"only {len(keep)} at-bats survive the track-record filter")
 
-    for a in card:
-        bid, season = a["bt"][0], a["season"]
-        a["z"] = pack_zones(get_hot_cold(bid, season)); time.sleep(0.25)
-        vp = get_vs_pitch(season).get(bid) or []
-        vp = [v for v in vp if v[0] in a["arsenal"]]        # only pitches he'd see here
-        a["vp"] = vp or None
-        a["sl"] = None if vp else get_season_line(bid, season)
-        if not vp:
-            time.sleep(0.25)
+    counts, n_counts = count_table(keep)
+
+    # Oversample, drop anything whose hot-cold grid is still placeholders, and
+    # take the first AT_BATS that survive.
+    card = []
+    for a in spread_at_bats(keep, min(len(keep), AT_BATS + 10)):
+        if len(card) >= AT_BATS:
+            break
+        z = pack_zones(get_hot_cold(a["bt"][0], a["season"]))
+        time.sleep(0.25)
+        if not z or re.search(r"-(\||$)", z):
+            continue
+        a["z"], a["vp"], a["sl"] = z, a.pop("_vp"), None
+        card.append(a)
+    if len(card) < AT_BATS:
+        raise SystemExit(f"only {len(card)} at-bats survived the hot-cold grid check")
 
     pack = {
-        "v": 1, "date": args.date,
-        "src": "MLB StatsAPI GUMBO + hotColdZones; Savant batter pitch-arsenal splits (2017+ only)",
+        "v": 2, "date": args.date,
+        "src": "MLB StatsAPI GUMBO + hotColdZones; Savant batter pitch-arsenal splits",
         "pitcher": {"id": who["id"], "name": who["name"], "hand": who["hand"],
                     "peak": who["peak"], "car": who["car"]},
         "abs": card,
