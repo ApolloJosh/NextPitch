@@ -61,11 +61,28 @@ The view is the catcher's, so a right-handed hitter stands on the left.
 
 ---
 
-## The home screen
+## The home screen, and the daily turnover
 
 The landing page names the day's arm with his peak line and a **Face today's
-pitcher** button, and lists every earlier card underneath. `#YYYY-MM-DD` on the
-URL drops you straight into that day.
+pitcher** button, and lists every earlier card underneath, with a countdown to
+the next one. `#YYYY-MM-DD` on the URL drops you straight into that day.
+
+Cards are built a week ahead so there is always a queue, but everything the app
+routes and renders is filtered to `date <= today` in the **player's own local
+time**. A card dated tomorrow does not exist as far as the UI is concerned: it
+isn't listed, and a deep link to it goes to the home screen instead. At local
+midnight the countdown hits zero and the page redraws itself with the new arm —
+no reload needed.
+
+If the queue ever runs dry the newest card stays playable, but it stops calling
+itself "today's pitcher" and says so.
+
+**This hides the next card; it does not secure it.** The packs are static files
+in a public repo, so anyone who guesses `data/packs/2026-09-09.json` can read
+tomorrow's pitcher. That is fine for a game where the answer is a name, and it
+is the price of a site with no server. The fix, if it ever matters, is to stop
+publishing ahead: `.github/workflows/daily-card.yml` builds each day's card on a
+schedule, so the queue depth is a setting rather than a design.
 
 ---
 
@@ -94,8 +111,12 @@ python3 tools/build_pack.py --date 2026-09-02
 python3 tools/build_pack.py --date 2026-09-02 --pitcher 543037    # force a pitcher
 ```
 
-The pitcher is chosen deterministically from the date, so everyone gets the same
-arm on the same day. The builder then samples outings spread across his career —
+The pitcher comes from a **rotation**, not a hash of the date. Hashing each date
+independently looked fine and wasn't: sha256 over the seven days from 2026-09-02
+lands on the same pitcher four times. The rotation shuffles the pool with a seed
+derived from the cycle number and walks it, so every arm appears once per cycle
+and the order changes each time round. It then steps over anyone who has been on
+the card in the last fourteen days, and anyone marked `eligible: false`. The builder then samples outings spread across his career —
 fourteen starts for a starter, fifty appearances for a reliever, who faces four
 hitters a night instead of twenty-five — and deals eighteen plate appearances
 round-robin by season so the card jumps around rather than sitting in one year.
@@ -157,6 +178,7 @@ best season is 2021 or later, because a pool ranked purely on merit comes out
 
 ```
 index.html                 the game; fetches a card at runtime
+.github/workflows/         daily card build, so the queue refills itself
 data/pitchers.json         the 30-pitcher pool and how it was built
 data/packs/<date>.json     one day's card
 data/packs/index.json      which cards exist, and the newest
@@ -171,16 +193,19 @@ dist/                      bundled builds
 ## Arms that can't carry a card
 
 A card needs at least three pitch types on offer (`MIN_ARSENAL`), or calling the
-pitch is a coin flip. That rules out the two-pitch closers in the pool —
-**Edwin Díaz** and **Craig Kimbrel** are fastball-and-one, and the builder exits
-rather than deal a card nobody can play. The daily pick doesn't know this yet:
-it hashes the date against all thirty names, so some dates land on an arm that
-can't be built and need a `--pitcher` override.
+pitch is a coin flip. Measured against the builder, two arms in the pool can't
+clear it and are marked `eligible: false` in `data/pitchers.json`, which the
+rotation reads:
 
-Two ways to close it, neither done: drop `MIN_ARSENAL` to 2 for relievers and
-accept the coin flip, or record each pitcher's arsenal size in
-`data/pitchers.json` and have the daily pick skip the ones that fall short. The
-second is the better answer.
+| | Usable at-bats from 50 games sampled | Needs |
+|---|---|---|
+| Craig Kimbrel | 14 | 18 |
+| Edwin Díaz | 6 | 18 |
+
+Closers in general are fine — **Aroldis Chapman** yields 64 usable at-bats and
+makes a good card, and a distinctive one: every plate appearance is the seventh
+inning or later, which plays nothing like a starter's card. It's the two-pitch
+arms specifically that fail.
 
 ---
 

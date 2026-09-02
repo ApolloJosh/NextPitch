@@ -16,7 +16,7 @@ desktop app's sandbox, so this belongs on your Mac's Terminal or a CI runner.
 Network lives in the get_* functions; everything below them is pure.
 """
 
-import argparse, hashlib, json, pathlib, random, re, sys, time, urllib.request
+import argparse, datetime, json, pathlib, random, re, sys, time, urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 API = "https://statsapi.mlb.com"
@@ -230,10 +230,45 @@ def count_table(all_abs):
 
 
 # ── entry ─────────────────────────────────────────────────────────────────
-def pick_pitcher(pool, date):
-    """Deterministic by date, so everyone gets the same arm on the same day."""
-    h = int(hashlib.sha256(date.encode()).hexdigest(), 16)
-    return pool[h % len(pool)]
+EPOCH = datetime.date(2026, 1, 1)
+
+def rotation(pool, date):
+    """The day's arm, and the ones behind it if he can't carry a card.
+
+    Hashing each date independently looked fine and wasn't: sha256 of the
+    seven dates from 2026-09-02 lands on the same pitcher four times. A daily
+    game wants a rotation. Shuffle the pool with a seed derived from the cycle
+    number, then walk it — every arm appears once per cycle, the order changes
+    each time round, and it still depends on nothing but the date.
+    """
+    n = (datetime.date.fromisoformat(date) - EPOCH).days
+    cycle, pos = divmod(n, len(pool))
+    order = list(range(len(pool)))
+    random.Random(f"next-pitch-cycle-{cycle}").shuffle(order)
+    return [pool[order[(pos + i) % len(pool)]] for i in range(len(pool))]
+
+RECENT_DAYS = 14
+
+def recent_ids(idx, date, days=RECENT_DAYS):
+    """Who has been on the card lately, so the rotation can step over him."""
+    d0 = datetime.date.fromisoformat(date)
+    out = set()
+    for e in idx.get("packs", []):
+        if not isinstance(e, dict):
+            continue
+        gap = (d0 - datetime.date.fromisoformat(e["date"])).days
+        if 0 < gap <= days:
+            out.add(e["id"])
+    return out
+
+def pick_pitcher(pool, date, idx=None, blocked=()):
+    """First arm in the rotation who isn't a recent repeat and isn't blocked."""
+    skip = set(blocked) | (recent_ids(idx, date) if idx else set())
+    order = rotation(pool, date)
+    for who in order:
+        if who.get("eligible", True) and who["id"] not in skip:
+            return who
+    return order[0]
 
 def main():
     ap = argparse.ArgumentParser()
@@ -243,8 +278,10 @@ def main():
     args = ap.parse_args()
 
     pool = json.loads((ROOT / "data/pitchers.json").read_text())["pitchers"]
+    idx_path = ROOT / "data/packs/index.json"
+    idx0 = json.loads(idx_path.read_text()) if idx_path.exists() else {"packs": []}
     who = next((p for p in pool if p["id"] == args.pitcher), None) if args.pitcher \
-          else pick_pitcher(pool, args.date)
+          else pick_pitcher(pool, args.date, idx0)
     if who is None:
         raise SystemExit(f"{args.pitcher} is not in the pool")
     print(f"{args.date}: {who['name']} ({who['role']}, {who['hand']}HP)")
@@ -319,7 +356,6 @@ def main():
 
     # The index carries enough about each arm for the home screen to name it
     # and print his peak line without downloading every card.
-    idx_path = ROOT / "data/packs/index.json"
     idx = json.loads(idx_path.read_text()) if idx_path.exists() else {"packs": []}
     entries = [e for e in idx.get("packs", []) if isinstance(e, dict)]
     entries = [e for e in entries if e["date"] != args.date]

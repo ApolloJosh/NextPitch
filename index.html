@@ -145,10 +145,15 @@
   .foot{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:600;margin-top:9px}
 
   /* ── overlays ─────────────────────────────────────────────── */
-  .veil{position:fixed;inset:0;background:rgba(30,26,20,.55);display:flex;align-items:center;
-        justify-content:center;padding:20px;z-index:50;overflow:auto}
-  .modal{background:var(--paper);border:3px solid var(--rule);max-width:620px;width:100%;padding:26px 28px;
-         box-shadow:10px 10px 0 rgba(30,26,20,.25)}
+  /* align-items:center on a scrolling flex container puts the overflow above
+     the scroll origin: on a phone the top of a tall modal is cut off and
+     cannot be reached. flex-start plus margin:auto centres it when it fits
+     and scrolls properly when it doesn't. */
+  .veil{position:fixed;inset:0;background:rgba(30,26,20,.55);display:flex;align-items:flex-start;
+        justify-content:center;padding:20px;z-index:50;overflow-y:auto;
+        -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  .modal{background:var(--paper);border:3px solid var(--rule);max-width:620px;width:100%;
+         margin:auto;padding:26px 28px;box-shadow:10px 10px 0 rgba(30,26,20,.25)}
   .modal h1{font-family:"Alfa Slab One",Georgia,serif;font-size:42px;line-height:.95;margin:0 0 4px;
             text-transform:uppercase;text-wrap:balance}
   .modal h1 em{font-style:normal;color:var(--red)}
@@ -202,6 +207,9 @@
            font-weight:600;min-width:74px;font-variant-numeric:tabular-nums}
   .mini .n{font-family:"Alfa Slab One",Georgia,serif;font-size:19px;text-transform:uppercase;flex:1}
   .mini .go{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--red);font-weight:700}
+  .unlock{margin-top:14px;text-align:center;font-size:13px;color:var(--mute)}
+  .unlock .lbl{letter-spacing:.16em}
+  .unlock b{font-variant-numeric:tabular-nums;color:var(--ink)}
   .home .foot{margin-top:34px;font-size:12px;color:var(--faint);text-align:center;line-height:1.7}
 
   /* ── in-game marquee ──────────────────────────────────────── */
@@ -214,7 +222,17 @@
         text-transform:uppercase;margin:2px 0 0}
   .mq-r{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:600;
         margin-top:3px}
-  @media(max-width:560px){.marquee{flex-wrap:wrap;gap:10px;padding-top:18px}}
+  @media(max-width:560px){
+    .marquee{flex-wrap:wrap;gap:10px;padding-top:18px}
+    .veil{padding:12px}
+    .modal{padding:20px 18px;box-shadow:6px 6px 0 rgba(30,26,20,.25)}
+    .modal h1{font-size:32px}
+    .modal h2{font-size:16px;margin:16px 0 6px}
+    .modal p{font-size:14px}
+    .rules li{grid-template-columns:66px 1fr;gap:9px;font-size:13px}
+    .tiles{gap:10px}
+    .note{margin-top:14px}
+  }
 </style>
 </head>
 <body>
@@ -803,16 +821,58 @@ async function getPack(date){
   return PACKS[date]=await r.json();
 }
 
+/* ── the release gate ─────────────────────────────────────────
+   Cards are built a week ahead so there is always a queue, but a
+   daily game turns over at midnight. Everything here is the
+   player's own local date: a card dated tomorrow does not exist
+   as far as the rest of the app is concerned. */
+const localToday = () => {
+  const n=new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+};
+const msToMidnight = () => {
+  const n=new Date(), m=new Date(n); m.setHours(24,0,0,0); return m-n;
+};
+
 /* The index is the list of days. Older builds wrote bare date strings;
    the current one writes {date,name,hand,id} so the home screen can
    name each arm without loading every card. */
-function entries(){
+function allEntries(){
   return (INDEX.packs||[]).map(e => typeof e==='string' ? {date:e} : e)
     .sort((a,b)=> a.date < b.date ? 1 : -1);
+}
+// Everything the app routes and renders goes through this: released days only.
+function entries(){
+  const t = localToday();
+  return allEntries().filter(e => e.date <= t);
+}
+const nextRelease = () => {
+  const t = localToday();
+  const ahead = allEntries().filter(e => e.date > t);
+  return ahead.length ? ahead[ahead.length-1] : null;   // the soonest one
+};
+
+/* The countdown doubles as the rollover: when it reaches zero the next
+   card has become today's, so redraw rather than leave a stale name up. */
+let unlockTimer=null;
+function tickUnlock(){
+  clearTimeout(unlockTimer);
+  const box=el('unlock'); if(!box) return;
+  const paint=()=>{
+    const ms=msToMidnight();
+    if(ms<=1000){ showHome(); return; }
+    const h=Math.floor(ms/3600000), m=Math.floor(ms%3600000/60000);
+    box.innerHTML = `<span class="lbl">Next pitcher</span> unlocks in `
+      + `<b>${h?h+'h ':''}${m}m</b>`;
+    unlockTimer=setTimeout(paint, Math.min(30000, ms));
+  };
+  paint();
 }
 
 function showHome(){
   const list=entries();
+  if(!list.length){ el('loading').hidden=false; el('home').hidden=true;
+    el('loading').textContent='No card has been released yet.'; return; }
   const today=list[0];
   const P0=(PACKS[today.date]||{}).pitcher;
   const name=today.name || (P0&&P0.name) || 'Today’s arm';
@@ -821,7 +881,8 @@ function showHome(){
   const car =today.car  || (P0&&P0.car);
 
   el('hero').innerHTML=`
-    <div class="today-lbl">${prettyDate(today.date)} &middot; today&rsquo;s pitcher</div>
+    <div class="today-lbl">${prettyDate(today.date)} &middot; ${
+      today.date===localToday() ? 'today&rsquo;s pitcher' : 'latest card'}</div>
     <div class="today-name">${name}</div>
     <div class="today-hand">${hand?hand+'HP':''}${car?` &middot; ${car.from}–${car.to}`:''}</div>
     ${peak?`<div class="statline">
@@ -830,8 +891,14 @@ function showHome(){
       <div><span>ERA+</span><b>${peak.eraPlus}</b></div>
       <div><span>Innings</span><b>${peak.ip}</b></div>
     </div>`:'<div style="height:18px"></div>'}
-    <button class="play" id="btn-today">Face today&rsquo;s pitcher</button>`;
+    <button class="play" id="btn-today">${
+      today.date===localToday() ? 'Face today&rsquo;s pitcher' : 'Face this pitcher'}</button>
+    ${nextRelease() ? `<div class="unlock" id="unlock"></div>`
+      : today.date===localToday() ? ''
+      : `<div class="unlock">No card for today yet &mdash; the queue ran out on
+         ${prettyDate(today.date)}.</div>`}`;
   el('btn-today').onclick=()=>startGame(today.date);
+  tickUnlock();
 
   const rest=list.slice(1);
   el('past').hidden = rest.length===0;
@@ -861,7 +928,7 @@ async function startGame(date){
   catch(e){ el('loading').textContent=e.message; return; }
 
   const P0=PACK.pitcher;
-  el('mq-k').innerHTML = date===list[0].date
+  el('mq-k').innerHTML = date===localToday()
     ? 'Today&rsquo;s pitcher' : `${prettyDate(date)} &middot; pitcher of the day`;
   el('mq-n').textContent = P0.name;
   el('mq-r').innerHTML = `${P0.hand}HP &middot; ${P0.car.from}–${P0.car.to} &middot; `
