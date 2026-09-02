@@ -144,6 +144,27 @@
   .tbl .none{color:var(--mute);font-style:italic;font-weight:400}
   .foot{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:600;margin-top:9px}
 
+  /* ── specials ─────────────────────────────────────────────── */
+  .sp-note{font-size:9px;letter-spacing:.1em;color:var(--mute);font-weight:600;text-transform:none}
+  .sp-wrap{display:grid;gap:9px}
+  .sp{border:1.5px solid var(--hair);background:var(--paper);padding:8px 9px}
+  .sp.on{border-color:var(--red);border-width:2px}
+  .sp-hd{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .sp-n{font-size:12.5px;font-weight:700}
+  .sp-used{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--red);font-weight:700}
+  .sp-blurb{font-size:11.5px;color:var(--mute);margin-top:3px;line-height:1.35}
+  .sp-out{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12.5px;flex-wrap:wrap}
+  .sp-out i{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--ink);flex:none}
+  .sp-out span{color:var(--ink-2)}
+  .pbtn.told{border-color:var(--red);box-shadow:inset 0 0 0 1px var(--red)}
+  .pbtn.out{opacity:.25}
+  .sp.dead{opacity:.5}
+  .deadhalf{fill:rgba(30,26,20,.13);pointer-events:none}
+  .mitt{pointer-events:none}
+  .mitt circle{fill:none;stroke:var(--red);stroke-width:2;stroke-dasharray:4 3;
+               vector-effect:non-scaling-stroke;opacity:.8}
+  .mitt path{stroke:var(--red);stroke-width:2;vector-effect:non-scaling-stroke;opacity:.8}
+
   /* ── overlays ─────────────────────────────────────────────── */
   /* align-items:center on a scrolling flex container puts the overflow above
      the scroll origin: on a phone the top of a tall modal is cut off and
@@ -407,6 +428,21 @@ function plateSVG(){
    the ninth — the only way to get more is to keep being right. */
 let PACK=null, S=null;
 const PRICE={mix:2, hot:3, cnt:3, vp:3};
+
+/* ── specials ─────────────────────────────────────────────────
+   The scouting rack sells tendencies — what he usually does. These
+   sell the answer to the pitch in front of you, once, and they are
+   priced to hurt: nine EDGE against a day that starts with ten and
+   pays one to three a pitch. Scoped to the pitch, not the at-bat,
+   so what you bought is gone the moment it is thrown. */
+const SPECIALS = {
+  can: {price:9, name:'Bang the Can',  blurb:'The pitch type. Just this one.'},
+  mitt:{price:9, name:'Read the Mitt', blurb:'Where it will cross. You still have to hit it.'},
+  two: {price:5, name:'Sit on Two',    blurb:'Two types. One of them is right.'},
+  half:{price:5, name:'Upstairs or Down', blurb:'Which half of the zone it crosses.'},
+};
+// One special can make another pointless. Don't let anyone spend on that.
+const REDUNDANT = {two:'can', half:'mitt'};
 const START_EDGE=10, MULT_CAP=8, MAX_OUTS=3;
 
 /* ── the bullseye ─────────────────────────────────────────────
@@ -431,7 +467,8 @@ function newGame(){
   const q=[];
   PACK.abs.forEach((a,ai)=>a.p.forEach((_,pi)=>q.push([ai,pi])));
   S={q, i:0, pts:0, edge:START_EDGE, mult:1, strikes:0, outs:0,
-     pickType:null, pick:null, revealed:null, unlocked:{}, log:[], over:false};
+     pickType:null, pick:null, revealed:null, unlocked:{}, log:[], over:false,
+     spec:{}, specSpent:0};
 }
 const AT =()=>S.q[S.i];
 const AB =()=>PACK.abs[AT()[0]];
@@ -443,6 +480,31 @@ const has = k => !!S.unlocked[key(k)];
 function buy(k){
   if(has(k) || S.edge < PRICE[k] || S.revealed) return;
   S.edge -= PRICE[k]; S.unlocked[key(k)] = true; render();
+}
+
+/* Specials are scoped to the pitch: at-bat index, then pitch index. */
+const skey = k => `${S.i}:${k}`;
+const got  = k => !!S.spec[skey(k)];
+const moot = k => !!(REDUNDANT[k] && got(REDUNDANT[k]));
+function buySpecial(k){
+  if(got(k) || moot(k) || S.edge < SPECIALS[k].price || S.revealed) return;
+  S.edge -= SPECIALS[k].price;
+  S.specSpent += SPECIALS[k].price;
+  const p = P();
+  if(k === 'half'){
+    // The same line zoneOf uses to sort the outer quadrants into 11/12 and 13/14.
+    S.spec[skey(k)] = p[5] > (p[6]+p[7])/2 ? 'up' : 'down';
+  } else if(k === 'two'){
+    // The real type plus one decoy from the rest of his arsenal, drawn
+    // from the pitch itself so the pair is the same every time you buy it.
+    const others = Object.keys(AB().arsenal).filter(c => c !== p[2]);
+    const decoy = others.length
+      ? others[(p[3]*10 + p[0]*7 + p[1]*3 | 0) % others.length] : null;
+    S.spec[skey(k)] = decoy ? [p[2], decoy].sort() : [p[2]];
+  } else {
+    S.spec[skey(k)] = true;
+  }
+  render();
 }
 function mixNow(){                           // his mix in that game, up to this pitch
   const m = Object.assign({}, AB().mix);
@@ -487,6 +549,24 @@ function buildZone(){
     for(let i=RINGS.length-1;i>=0;i--)
       g += `<circle class="ring${i===0?' bull':''}" cx="${tx}" cy="${ty}" r="${RINGS[i].r}"/>`;
     g += `<line class="tie" x1="${gx}" y1="${gy}" x2="${tx}" y2="${ty}"/>`;
+  }
+
+  // Upstairs or Down: black out the half it isn't in. Same line zoneOf uses.
+  if(got('half') && !S.revealed){
+    const yMid = Y((szT+szB)/2);
+    const up = S.spec[skey('half')]==='up';
+    g += `<rect class="deadhalf" x="${XMIN}" y="${up?yMid:0}" width="${WIDE}"
+            height="${(up?YTOP-yMid:yMid).toFixed(3)}"/>`;
+  }
+
+  // Read the Mitt: the catcher's target, shown before the pitch. It marks the
+  // spot but does not place the call — you still have to land on it.
+  if(got('mitt') && !S.revealed){
+    const p=P(), mx=p[4], my=Y(p[5]);
+    g += `<g class="mitt">
+      <circle cx="${mx}" cy="${my}" r="${RINGS[0].r}"/>
+      <path d="M${mx-0.34} ${my}h0.16M${mx+0.18} ${my}h0.16M${mx} ${my-0.34}v0.16M${mx} ${my+0.18}v0.16"/>
+    </g>`;
   }
 
   // The call itself: a crosshair, drawn wherever the pointer last landed.
@@ -591,13 +671,36 @@ function buildRack(){
     return `<span class="shut" style="padding:0">Nothing on file for ${ab.season}.</span>`;
   };
 
+  const special = k => {
+    const S1=SPECIALS[k], open=got(k), dead=moot(k), afford=S.edge>=S1.price;
+    let body;
+    if(dead)       body = `<div class="sp-blurb">${SPECIALS[REDUNDANT[k]].name} already told you.</div>`;
+    else if(!open) body = `<div class="sp-blurb">${S1.blurb}</div>`;
+    else if(k==='can')  body = `<div class="sp-out">${chip(P()[2])}<b>${P()[2]}</b>
+                                <span>${AB().arsenal[P()[2]]}</span></div>`;
+    else if(k==='mitt') body = `<div class="sp-out"><span>Marked on the zone. Land on it.</span></div>`;
+    else if(k==='half') body = `<div class="sp-out"><b>${S.spec[skey(k)]==='up'?'Upstairs':'Down'}</b>
+                                <span>&mdash; the other half is out.</span></div>`;
+    else body = `<div class="sp-out">`+S.spec[skey(k)].map(c=>
+                  `${chip(c)}<b style="margin-right:10px">${c}</b>`).join('')+`</div>`;
+    return `<div class="sp${open?' on':''}${dead?' dead':''}">
+      <div class="sp-hd"><span class="sp-n">${S1.name}</span>${open
+        ? `<span class="sp-used">Used</span>`
+        : `<button class="buy" data-sp="${k}" ${(!afford||shut||dead)?'disabled':''}>${S1.price} EDGE</button>`}</div>
+      ${body}</div>`;
+  };
+
   document.getElementById('rack').innerHTML =
       `<div class="lbl" style="margin:2px 0 -2px 2px">Scouting &mdash; ${S.edge} EDGE left</div>`
+    + `<section class="rk"><h3>In your ear <span class="sp-note">this pitch only</span></h3>
+        <div class="in sp-wrap">${special('can')}${special('mitt')}
+          ${special('two')}${special('half')}</div></section>`
     + panel('cnt','In this count', cntBody)
     + panel('hot','Hot &amp; cold zones', hotBody)
     + panel('mix','His mix that game', mixBody)
     + panel('vp', (ab.vp && ab.vp.length) ? 'Batter vs pitch type' : `Batter, ${ab.season}`, vpBody);
   document.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buy(b.dataset.buy));
+  document.querySelectorAll('[data-sp]').forEach(b=>b.onclick=()=>buySpecial(b.dataset.sp));
 }
 
 /* ── render ───────────────────────────────────────────────────── */
@@ -622,10 +725,15 @@ function render(){
     + `${ab.top?'top':'bot'} ${ORD(ab.inning)}, ${ab.o} out${ab.o===1?'':'s'}, ${ONBASE[ab.on]||ab.on}`;
   document.getElementById('z-count').innerHTML=`${p[0]}&ndash;${p[1]}`;
 
-  document.getElementById('arsenal').innerHTML=Object.entries(ab.arsenal).map(([c,full])=>
-    `<button class="pbtn" data-t="${c}" aria-pressed="${S.pickType===c}" ${S.revealed?'disabled':''}>
+  const told = got('can') ? P()[2] : null;
+  const shortlist = got('two') ? S.spec[skey('two')] : null;
+  document.getElementById('arsenal').innerHTML=Object.entries(ab.arsenal).map(([c,full])=>{
+    const out = shortlist && !shortlist.includes(c) && c !== told;
+    return `<button class="pbtn${told===c?' told':''}${out?' out':''}" data-t="${c}"
+       aria-pressed="${S.pickType===c}" ${(S.revealed||out)?'disabled':''}>
        <i class="dot" style="background:${pc(c)}"></i>
-       <span><span class="code">${c}</span><span class="full">${full}</span></span></button>`).join('');
+       <span><span class="code">${c}</span><span class="full">${full}</span></span></button>`;
+  }).join('');
   document.querySelectorAll('.pbtn').forEach(b=>b.onclick=()=>{S.pickType=b.dataset.t;render();});
 
   buildZone(); buildRack();
@@ -654,6 +762,7 @@ function verdictHTML(){
       <span class="chip ${v.tOK?'ok':'no'}">Type ${v.tOK?'✓':'✗'} ${v.type}</span>
       <span class="chip ${v.ring?'ok':'no'}">${v.ring?v.ring.name:'Missed the spot'} &mdash; ${inches(v.d)}″ off</span>
       ${v.bull?`<span class="chip bonus">Dead centre &mdash; points doubled</span>`:''}
+      ${v.helped?`<span class="chip">You had help</span>`:''}
       ${v.pts?`<span class="chip">${v.base} × ${v.multUsed.toFixed(2).replace(/0$/,'')}</span>`:''}
       ${v.edge?`<span class="chip ok">+${v.edge} EDGE</span>`:''}
       ${v.rang?`<span class="chip no">Third miss &mdash; ${left} out${left===1?'':'s'} left</span>`:''}
@@ -686,8 +795,9 @@ function submit(){
   const grow = ring ? ring.grow : TYPE_ONLY_GROW;
   if(base) S.mult=Math.min(MULT_CAP, Math.round(S.mult*grow*100)/100);
   else { S.strikes++; S.mult=1; if(S.strikes>=3){ S.strikes=0; S.outs++; rang=true; } }
-  S.log.push(bull?'B':base?'H':'X');
-  S.lastResult={pts, base, multUsed, edge, rang, tOK, zone, d, ring, bull, locPts,
+  const helped = Object.keys(SPECIALS).some(got);
+  S.log.push(helped ? (base?'A':'X') : (bull?'B':base?'H':'X'));
+  S.lastResult={pts, base, multUsed, edge, rang, tOK, zone, d, ring, bull, locPts, helped,
     spot: spotWords(p[4], p[5], p[6], p[7], ab.bt[2]),
     type:p[2], full:ab.arsenal[p[2]], velo:p[3], desc:p[9],
     res: PI()===ab.p.length-1 ? ab.res : null};
@@ -743,6 +853,22 @@ function showIntro(){
     this count, the hitter&rsquo;s hot and cold zones, his pitch mix earlier that game, how this hitter
     handles each pitch. <b>It is one budget for the whole day</b> &mdash; nothing refills between
     hitters, so what you spend on the first man isn&rsquo;t there for the ninth.</p>
+    <h2>In your ear</h2>
+    <p>Three of them sell the answer to the pitch in front of you rather than a
+    tendency, and they last exactly one pitch.</p>
+    <ul class="rules">
+      <li><b>${SPECIALS.can.price} EDGE</b><span><b>Bang the Can</b> &mdash; the pitch type, this once.</span></li>
+      <li><b>${SPECIALS.mitt.price} EDGE</b><span><b>Read the Mitt</b> &mdash; where it will cross, marked on the
+        zone. It shows you the spot; landing on it is still your problem.</span></li>
+      <li><b>${SPECIALS.two.price} EDGE</b><span><b>Sit on Two</b> &mdash; narrows the arsenal to two types,
+        one of which is right.</span></li>
+      <li><b>${SPECIALS.half.price} EDGE</b><span><b>Upstairs or Down</b> &mdash; which half of the zone it
+        crosses. The other half goes dark.</span></li>
+    </ul>
+    <p>At nine EDGE against a day that starts with ten, these are one or two
+    moments a game, not a habit &mdash; and they are worth most when the
+    multiplier is already up. Pitches you bought help on are counted separately
+    on the final card.</p>
     <div class="callrow" style="max-width:none"><button class="call" id="go">Play ball</button></div>
     <p class="note">Every pitch, location and split is real, from MLB&rsquo;s public data. The view is the
     catcher&rsquo;s, so a right-handed hitter stands on the left.</p>
@@ -770,8 +896,9 @@ function showStepIn(){
 }
 
 function showFinal(){
-  const grid=S.log.map(c=>c==='B'?'\u{1F7E9}':c==='H'?'\u{1F7E8}':'⬛').join('');
-  const both=S.log.filter(c=>c==='B').length, part=S.log.filter(c=>c==='H').length;
+  const grid=S.log.map(c=>c==='B'?'\u{1F7E9}':c==='H'?'\u{1F7E8}':c==='A'?'\u{1F7E6}':'⬛').join('');
+  const both=S.log.filter(c=>c==='B').length, part=S.log.filter(c=>c==='H').length,
+        helped=S.log.filter(c=>c==='A').length;
   const seen=new Set(S.q.slice(0,S.i+1).map(x=>x[0])).size;
   modal.innerHTML=`<div class="veil"><div class="modal">
     <p class="kick">Final &middot; ${PACK.date} &middot; ${PACK.pitcher.name}</p>
@@ -780,7 +907,8 @@ function showFinal(){
        : 'You called every pitch on the card.'}</p>
     <div class="tiles">
       <div><span class="lbl">Bullseyes</span><b>${both}</b></div>
-      <div><span class="lbl">Other scores</span><b>${part}</b></div>
+      <div><span class="lbl">Other scores</span><b>${part}${helped?`<span
+        style="font-size:15px;color:var(--mute)"> +${helped} helped</span>`:''}</b></div>
       <div><span class="lbl">Pitches</span><b>${S.log.length}</b></div>
     </div>
     <p class="grid-out">${grid}</p>
@@ -792,7 +920,8 @@ function showFinal(){
   </div></div>`;
   document.getElementById('again').onclick=()=>{newGame();closeModal();render();};
   document.getElementById('share').onclick=()=>{
-    const txt=`Next Pitch — ${PACK.date}\n${PACK.pitcher.name}\n${S.pts} points · ${both} bullseyes · ${S.log.length} pitches\n${grid}`;
+    const txt=`Next Pitch — ${PACK.date}\n${PACK.pitcher.name}\n${S.pts} points · ${both} bullseyes`
+      + (helped?` · ${helped} bought`:'') + ` · ${S.log.length} pitches\n${grid}`;
     (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(toast,toast);
   };
 }

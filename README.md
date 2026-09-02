@@ -57,6 +57,46 @@ call, 2 for both, 3 for a bullseye. Spend it on the scouting rack:
 **It is one budget for the whole day.** Nothing refills between hitters, so what
 you spend scouting the first man isn't there for the ninth.
 
+### In your ear
+
+Three more sell the answer to the pitch in front of you rather than a tendency,
+and they last exactly one pitch:
+
+| | | |
+|---|---|---|
+| **Bang the Can** | 9 EDGE | The pitch type, this once. |
+| **Read the Mitt** | 9 EDGE | Where it will cross, marked on the zone. It shows the spot; landing on it is still your problem. |
+| **Sit on Two** | 5 EDGE | Narrows the arsenal to two types, one of which is right. |
+| **Upstairs or Down** | 5 EDGE | Which half of the zone it crosses. The other half goes dark. |
+
+Two of them make the other two pointless — Bang the Can settles what Sit on Two
+narrows, and Read the Mitt settles what Upstairs or Down narrows — so when the
+stronger one is bought the cheaper one is disabled rather than left there to
+take five EDGE for nothing.
+
+Simulated over a real card, 61 runs each:
+
+| | Points | Pitches | Median buys (can/mitt/two/half) |
+|---|---|---|---|
+| Never buy | 41 | 16 | 0 / 0 / 0 / 0 |
+| The two cheap narrowers when flush | 34 | 16 | 0 / 0 / 1 / 1 |
+| Bank, then cash in at a high multiplier | 80 | 18 | 0 / 1 / 0 / 0 |
+| Buy everything you can afford | **96** | 26 | 1 / 1 / 2 / 2 |
+
+The fourth special changed the shape of this. With three, banking to cash in at
+a high multiplier was the best play (80 against 75 for buying constantly). Add a
+second five-EDGE narrower and spending everything as you earn it wins instead —
+not by scoring more per pitch but by **surviving longer**, 26 pitches against
+18. Both are coherent: one trades floor for ceiling, the other buys the floor.
+Whether two viable strategies is better than one clear one is a design call, not
+a bug, and it's easy to tune back by pricing the narrowers apart.
+
+The scouting rack still earns its place: three EDGE of *In this count* covers
+every pitch of a six-pitch at-bat, where five EDGE of *Sit on Two* covers one.
+
+Pitches you bought help on are logged separately — counted on the final card and
+shown as 🟦 in the shared grid — so a score says how it was got.
+
 The view is the catcher's, so a right-handed hitter stands on the left.
 
 ---
